@@ -15,7 +15,12 @@ object K2ResponseParser {
     fun parse(rawResponse: String?, defaultSummary: String = "Notification received"): NotificationAnalysis {
         if (rawResponse.isNullOrBlank()) return fallback(defaultSummary)
 
-        val fullText = rawResponse.trim()
+        var fullText = rawResponse.trim()
+        if (!fullText.startsWith("{") && (fullText.startsWith("true") || fullText.startsWith("false") || fullText.startsWith(" true") || fullText.startsWith(" false"))) {
+            fullText = "{\"important\": $fullText"
+        } else if (!fullText.startsWith("{") && fullText.contains("\"alert\"")) {
+            fullText = "{\"important\": $fullText"
+        }
 
         // 1. Try finding JSON block
         val start = fullText.indexOf('{')
@@ -45,9 +50,9 @@ object K2ResponseParser {
         // 2. Resilient text parsing for key-value outputs
         val lower = fullText.lowercase()
         val hasImportantTrue = lower.contains("\"important\": true") || lower.contains("\"important\":true") || 
-                lower.contains("important: true") || lower.contains("important:true")
+                lower.contains("important: true") || lower.contains("important:true") || lower.startsWith("true")
         val hasImportantFalse = lower.contains("\"important\": false") || lower.contains("\"important\":false") || 
-                lower.contains("important: false") || lower.contains("important:false")
+                lower.contains("important: false") || lower.contains("important:false") || lower.startsWith("false")
 
         if (hasImportantTrue && !hasImportantFalse) {
             val hasAlertTrue = lower.contains("\"alert\": true") || lower.contains("alert: true")
