@@ -90,8 +90,8 @@ class NotificationProcessor(
             return senderClean.contains(targetClean) || senderClean.startsWith(targetClean)
         }
 
-        // If target is root (e.g. "krishna" or "madhu"), sender words must start with or equal the target
-        return senderWords.any { it == target || it.startsWith(target) } || senderClean.startsWith(targetClean)
+        // If target is root (e.g. "krishna", "madhu", "arjun"), sender words or clean sender must start with target
+        return senderWords.any { it == target || it.startsWith(target) } || senderClean.startsWith(targetClean) || senderClean.contains(targetClean)
     }
 
     private suspend fun processSingle(data: NotificationData) {
@@ -127,7 +127,7 @@ class NotificationProcessor(
             val packageLower = data.packageName.lowercase().trim()
             val contentLower = "$senderLower $titleLower $textLower $appLower"
 
-            // 2. Identify System & Ongoing Indicators
+            // 2. Identify System & Media Indicators
             val isMedia = data.category == "transport" ||
                     packageLower.contains("spotify") ||
                     packageLower.contains("music") ||
@@ -144,11 +144,10 @@ class NotificationProcessor(
                     titleLower.contains("screenshot") || textLower.contains("screenshot")
             val isSyncPlaceholder = textLower.contains("checking for new messages") || textLower.contains("searching for new messages")
 
-            // Social likes/reactions on shared posts (Not direct messages)
+            // Public social post likes / reactions (e.g. "devika liked your reel" - NOT a DM)
             val isSocialReaction = textLower.contains("liked your") || textLower.contains("liked a") ||
-                    textLower.contains("liked _") || textLower.contains("liked ") ||
-                    textLower.contains("reacted") || textLower.contains("started following") ||
-                    textLower.contains("commented on") || textLower.contains("shared a reel") ||
+                    textLower.contains("liked _") || textLower.contains("reacted to your") ||
+                    textLower.contains("started following") || textLower.contains("commented on") ||
                     titleLower.contains("liked your") || titleLower.contains("liked _")
 
             var isImportant = false
@@ -171,73 +170,106 @@ class NotificationProcessor(
                     aiCategory = "other"
                 } else {
                     val stopWords = setOf(
-                        "messages", "message", "from", "any", "all", "every", "is", "are",
+                        "whatever", "messages", "message", "from", "any", "all", "every", "is", "are",
                         "important", "alert", "priority", "urgent", "on", "in", "notification",
                         "notifications", "about", "to", "the", "and", "with", "for", "msg", "msgs",
                         "sent", "by", "if", "its", "it's", "it", "someone", "anyone", "everyone",
-                        "related", "relating", "please", "be"
+                        "related", "relating", "please", "be", "never", "not", "dont", "do"
                     )
 
-                    var matchedRule: NotificationRule? = null
-                    var matchExplanation: String? = null
+                    // 1. PRIORITY CHECK: Evaluate Negative / Block Rules First! (Overrides all other rules)
+                    val negativeRules = rules.filter { rule ->
+                        val rLower = rule.text.lowercase()
+                        rLower.contains("never important") || rLower.contains("not important") ||
+                        rLower.contains("never alert") || rLower.contains("do not alert") ||
+                        rLower.contains("dont alert") || rLower.contains("no alert") ||
+                        rLower.contains("ignore") || rLower.contains("block")
+                    }
 
-                    for (rule in rules) {
-                        val ruleLower = rule.text.lowercase().trim()
-                        val isPersonRule = ruleLower.contains("from ") || ruleLower.contains("msg from") ||
-                                ruleLower.contains("message from") || ruleLower.contains("messages from")
+                    var isBlockedByRule: NotificationRule? = null
+                    for (negRule in negativeRules) {
+                        val negLower = negRule.text.lowercase()
+                        val negTokens = negLower.split(Regex("[^a-zA-Z0-9_]+")).filter { it.length >= 2 && it !in stopWords }
+                        val isPersonNegRule = negLower.contains("from ") || negLower.contains("msg from") || negLower.contains("message from")
 
-                        if (isPersonRule) {
-                            // Extract person target name from the rule
-                            val ruleTokens = ruleLower.split(Regex("[^a-zA-Z0-9_]+")).filter { it.length >= 2 && it !in stopWords }
-                            val targetName = ruleTokens.firstOrNull() ?: ""
-
-                            if (targetName.isNotEmpty()) {
-                                val isDirectSenderMatch = !data.sender.isNullOrBlank() && matchesPersonName(targetName, data.sender)
-                                val isTitleSenderMatch = !data.title.isNullOrBlank() && !isMedia && !isNavigation && matchesPersonName(targetName, data.title)
-
-                                if (!isMedia && !isNavigation && !isSocialReaction && (isDirectSenderMatch || isTitleSenderMatch)) {
-                                    matchedRule = rule
-                                    matchExplanation = "Message from ${data.sender ?: targetName} matching rule: ${rule.text}"
-                                    aiCategory = "messages"
-                                    break
-                                }
+                        if (isPersonNegRule && negTokens.isNotEmpty()) {
+                            val targetName = negTokens.first()
+                            val senderMatches = (!data.sender.isNullOrBlank() && matchesPersonName(targetName, data.sender)) ||
+                                    (!data.title.isNullOrBlank() && matchesPersonName(targetName, data.title))
+                            if (senderMatches) {
+                                isBlockedByRule = negRule
+                                break
                             }
-                        } else {
-                            // Dynamic semantic rule: Extract meaningful keyword tokens from the rule
-                            val ruleTokens = ruleLower.split(Regex("[^a-zA-Z0-9_]+")).filter { it.length >= 3 && it !in stopWords }
-                            if (ruleTokens.isNotEmpty()) {
-                                val allTokensMatch = ruleTokens.all { token ->
-                                    contentLower.split(Regex("[^a-zA-Z0-9_]+")).any { word -> word == token || word.startsWith(token) }
-                                }
-                                if (allTokensMatch) {
-                                    matchedRule = rule
-                                    matchExplanation = "Matches user rule: ${rule.text}"
-                                    aiCategory = "important"
-                                    break
-                                }
+                        } else if (negTokens.isNotEmpty()) {
+                            val allTokensMatch = negTokens.all { token ->
+                                contentLower.split(Regex("[^a-zA-Z0-9_]+")).any { word -> word == token || word.startsWith(token) }
+                            }
+                            if (allTokensMatch) {
+                                isBlockedByRule = negRule
+                                break
                             }
                         }
                     }
 
-                    if (matchedRule != null) {
-                        isImportant = true
-                        shouldAlert = true
-                        decisionReason = matchExplanation ?: "Matches user rule: ${matchedRule.text}"
-                    } else {
+                    if (isBlockedByRule != null) {
                         isImportant = false
                         shouldAlert = false
-                        decisionReason = "General notification; no matching rule"
+                        decisionReason = "Blocked by user rule: ${isBlockedByRule.text}"
                         aiCategory = "other"
-                    }
+                    } else {
+                        // 2. Evaluate Positive Rules
+                        val positiveRules = rules.filter { !negativeRules.contains(it) }
+                        var matchedRule: NotificationRule? = null
+                        var matchExplanation: String? = null
 
-                    // Respect explicit 'do not alert' rules
-                    val isExplicitDoNotAlert = rules.any { rule ->
-                        val rLower = rule.text.lowercase()
-                        (rLower.contains("do not alert") || rLower.contains("dont alert") || rLower.contains("no alert") || rLower.contains("silent")) &&
-                        ((senderLower.isNotEmpty() && rLower.contains(senderLower)) || (titleLower.isNotEmpty() && rLower.contains(titleLower)) || (appLower.isNotEmpty() && rLower.contains(appLower)))
-                    }
-                    if (isExplicitDoNotAlert) {
-                        shouldAlert = false
+                        for (rule in positiveRules) {
+                            val ruleLower = rule.text.lowercase().trim()
+                            val isPersonRule = ruleLower.contains("from ") || ruleLower.contains("msg from") ||
+                                    ruleLower.contains("message from") || ruleLower.contains("messages from")
+
+                            if (isPersonRule) {
+                                // Extract person target name from the rule
+                                val ruleTokens = ruleLower.split(Regex("[^a-zA-Z0-9_]+")).filter { it.length >= 2 && it !in stopWords }
+                                val targetName = ruleTokens.firstOrNull() ?: ""
+
+                                if (targetName.isNotEmpty()) {
+                                    val isDirectSenderMatch = !data.sender.isNullOrBlank() && matchesPersonName(targetName, data.sender)
+                                    val isTitleSenderMatch = !data.title.isNullOrBlank() && !isMedia && !isNavigation && matchesPersonName(targetName, data.title)
+
+                                    if (!isMedia && !isNavigation && !isSocialReaction && (isDirectSenderMatch || isTitleSenderMatch)) {
+                                        matchedRule = rule
+                                        matchExplanation = "Message from ${data.sender ?: targetName} matching rule: ${rule.text}"
+                                        aiCategory = "messages"
+                                        break
+                                    }
+                                }
+                            } else {
+                                // Dynamic semantic rule: Extract meaningful keyword tokens from the rule
+                                val ruleTokens = ruleLower.split(Regex("[^a-zA-Z0-9_]+")).filter { it.length >= 3 && it !in stopWords }
+                                if (ruleTokens.isNotEmpty()) {
+                                    val allTokensMatch = ruleTokens.all { token ->
+                                        contentLower.split(Regex("[^a-zA-Z0-9_]+")).any { word -> word == token || word.startsWith(token) }
+                                    }
+                                    if (allTokensMatch) {
+                                        matchedRule = rule
+                                        matchExplanation = "Matches user rule: ${rule.text}"
+                                        aiCategory = "important"
+                                        break
+                                    }
+                                }
+                            }
+                        }
+
+                        if (matchedRule != null) {
+                            isImportant = true
+                            shouldAlert = true
+                            decisionReason = matchExplanation ?: "Matches user rule: ${matchedRule.text}"
+                        } else {
+                            isImportant = false
+                            shouldAlert = false
+                            decisionReason = "General notification; no matching rule"
+                            aiCategory = "other"
+                        }
                     }
                 }
             }
