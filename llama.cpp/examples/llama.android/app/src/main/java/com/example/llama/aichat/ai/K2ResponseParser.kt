@@ -26,7 +26,7 @@ object K2ResponseParser {
                 val json = JSONObject(jsonCandidate)
                 val important = json.optBoolean("important", false)
                 val alert = if (important) json.optBoolean("alert", false) else false
-                val reason = json.optString("reason", if (important) "Matches user context" else "General notification")
+                val reason = json.optString("reason", if (important) "Matches user rules" else "General notification")
                 val summary = json.optString("summary", defaultSummary).ifBlank { defaultSummary }
                 val category = json.optString("category", if (important) "important" else "other")
 
@@ -54,7 +54,7 @@ object K2ResponseParser {
             return NotificationAnalysis(
                 important = true,
                 alert = hasAlertTrue,
-                reason = "Matches user context",
+                reason = "Matches user rules",
                 summary = defaultSummary,
                 category = "important"
             )
@@ -66,9 +66,8 @@ object K2ResponseParser {
     private fun fallback(summary: String) = NotificationAnalysis(
         important = false,
         alert = false,
-        reason = "General notification; does not match user context",
+        reason = "General notification; no matching rule",
         summary = summary,
         category = "other"
     )
 }
-

@@ -99,15 +99,22 @@ class NotificationListener : NotificationListenerService() {
 
         val subText = extras.getCharSequence(Notification.EXTRA_SUB_TEXT)?.toString()?.trim()
 
-        // 3. Fallback sender extraction
-        if (sender.isNullOrBlank() || sender.equals("You", ignoreCase = true)) {
+        val isMediaOrNav = notification.category == Notification.CATEGORY_TRANSPORT ||
+                notification.category == Notification.CATEGORY_NAVIGATION ||
+                sbn.packageName.contains("spotify") ||
+                sbn.packageName.contains("music") ||
+                sbn.packageName.contains("maps") ||
+                sbn.packageName.contains("waze")
+
+        // 3. Fallback sender extraction only for non-media / non-navigation notifications
+        if ((sender.isNullOrBlank() || sender.equals("You", ignoreCase = true)) && !isMediaOrNav) {
             val convTitle = extras.getCharSequence(NotificationCompat.EXTRA_CONVERSATION_TITLE)?.toString()?.trim()
             if (!convTitle.isNullOrBlank() && !convTitle.equals("You", ignoreCase = true)) {
                 sender = convTitle
             }
         }
 
-        if (sender.isNullOrBlank() || sender.equals("You", ignoreCase = true)) {
+        if ((sender.isNullOrBlank() || sender.equals("You", ignoreCase = true)) && !isMediaOrNav) {
             if (!title.isNullOrBlank() && !title.equals("You", ignoreCase = true)) {
                 sender = title
             }
