@@ -3,10 +3,9 @@ package com.example.llama.aichat.notification
 import android.content.Context
 import android.util.Log
 import com.example.llama.aichat.ai.K2InferenceManager
-import com.example.llama.aichat.ai.K2PromptBuilder
-import com.example.llama.aichat.ai.K2ResponseParser
 import com.example.llama.aichat.data.NotificationRecord
 import com.example.llama.aichat.data.NotificationRepository
+import com.example.llama.aichat.data.NotificationRule
 import com.example.llama.aichat.data.NotificationRuleRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -74,12 +73,33 @@ class NotificationProcessor(
         queue.trySend(data)
     }
 
+    private fun matchesPersonName(ruleTarget: String, senderName: String): Boolean {
+        val target = ruleTarget.lowercase().trim()
+        val targetClean = target.replace(" ", "")
+        val sender = senderName.lowercase().trim()
+        val senderClean = sender.replace(" ", "")
+        val senderWords = sender.split(Regex("[^a-zA-Z0-9_]+")).filter { it.length >= 2 }
+
+        if (target.isEmpty() || sender.isEmpty()) return false
+
+        // Exact or whitespace-insensitive match
+        if (senderClean == targetClean) return true
+
+        // If target is specific (e.g. "krishnavardhan"), sender must match the specific name
+        if (targetClean.length >= 7) {
+            return senderClean.contains(targetClean) || senderClean.startsWith(targetClean)
+        }
+
+        // If target is root (e.g. "krishna" or "madhu"), sender words must start with or equal the target
+        return senderWords.any { it == target || it.startsWith(target) } || senderClean.startsWith(targetClean)
+    }
+
     private suspend fun processSingle(data: NotificationData) {
         val startTime = System.currentTimeMillis()
         try {
             Log.d("NotificationProcessor", "Processing notification from ${data.packageName}: ${data.title}")
 
-            // 1. Deduplication: Skip if exact identical notification already exists within 60 seconds (OS re-post / audio progress update)
+            // 1. Deduplication: Skip if exact identical notification already exists within 60 seconds
             val recentDuplicate = notificationRepository.findRecentDuplicate(
                 packageName = data.packageName,
                 key = data.notificationKey,
@@ -104,15 +124,39 @@ class NotificationProcessor(
             val titleLower = data.title?.lowercase()?.trim() ?: ""
             val textLower = data.text?.lowercase()?.trim() ?: ""
             val appLower = data.appName.lowercase().trim()
+            val packageLower = data.packageName.lowercase().trim()
+            val contentLower = "$senderLower $titleLower $textLower $appLower"
 
-            // 2. Fast System Noise Filter (0ms compute)
-            val isSystemMeter = (data.packageName == "com.android.systemui" || data.packageName == "android") &&
+            // 2. Identify App & Notification Type
+            val isMedia = data.category == "transport" ||
+                    packageLower.contains("spotify") ||
+                    packageLower.contains("music") ||
+                    packageLower.contains("audio") ||
+                    packageLower.contains("podcast")
+            val isNavigation = data.category == "navigation" ||
+                    packageLower.contains("maps") ||
+                    packageLower.contains("waze")
+            val isSystemMeter = (packageLower == "com.android.systemui" || packageLower == "android") &&
                     (titleLower.contains("charging") || textLower.contains("charging") ||
                      titleLower.contains("battery") || textLower.contains("battery") ||
                      titleLower.contains("usb") || textLower.contains("usb"))
-            val isScreenshot = data.packageName.contains("screencapture") || data.packageName.contains("screenshot") ||
+            val isScreenshot = packageLower.contains("screencapture") || packageLower.contains("screenshot") ||
                     titleLower.contains("screenshot") || textLower.contains("screenshot")
             val isSyncPlaceholder = textLower.contains("checking for new messages") || textLower.contains("searching for new messages")
+
+            // Social reactions / likes (Not direct personal messages)
+            val isSocialReaction = textLower.contains("liked your") || textLower.contains("liked a") ||
+                    textLower.contains("liked _") || textLower.contains("liked ") ||
+                    textLower.contains("reacted") || textLower.contains("started following") ||
+                    textLower.contains("commented on") || textLower.contains("shared a reel") ||
+                    titleLower.contains("liked your") || titleLower.contains("liked _")
+
+            // Communication / Chat App indicators
+            val isCommunicationApp = packageLower.contains("whatsapp") || packageLower.contains("telegram") ||
+                    packageLower.contains("messaging") || packageLower.contains("sms") ||
+                    packageLower.contains("signal") || packageLower.contains("discord") ||
+                    packageLower.contains("slack") || packageLower.contains("teams") ||
+                    (packageLower.contains("instagram") && !isSocialReaction && (titleLower.contains("message") || !data.sender.isNullOrBlank()))
 
             var isImportant = false
             var shouldAlert = false
@@ -133,29 +177,84 @@ class NotificationProcessor(
                     decisionReason = "No active user rules"
                     aiCategory = "other"
                 } else {
-                    val ruleTexts = rules.map { it.text.trim() }
-
-                    // Invoke on-device K2 Horizon 0.9B LLM
-                    val prompt = K2PromptBuilder.buildPrompt(
-                        rules = ruleTexts,
-                        appName = data.appName,
-                        packageName = data.packageName,
-                        title = data.title,
-                        text = data.text,
-                        sender = data.sender
+                    val stopWords = setOf(
+                        "messages", "message", "from", "any", "all", "every", "is", "are",
+                        "important", "alert", "priority", "urgent", "on", "in", "notification",
+                        "notifications", "about", "to", "the", "and", "with", "for", "msg", "msgs",
+                        "sent", "by", "if", "its", "it's", "it", "someone", "anyone", "everyone",
+                        "related", "relating", "please"
                     )
-                    Log.d("NotificationProcessor", "Invoking K2 AI inference with prompt:\n$prompt")
-                    val aiResponse = inferenceManager.analyze(prompt)
-                    Log.d("NotificationProcessor", "K2 AI Raw Response:\n$aiResponse")
 
-                    val analysis = K2ResponseParser.parse(aiResponse, defaultCleanSummary)
-                    isImportant = analysis.important
-                    shouldAlert = analysis.alert
-                    decisionReason = analysis.reason
-                    finalSummary = analysis.summary.ifBlank { defaultCleanSummary }
-                    aiCategory = analysis.category
+                    var matchedRule: NotificationRule? = null
+                    var matchExplanation: String? = null
 
-                    // Respect explicit 'do not alert' / 'dont alert' rules
+                    for (rule in rules) {
+                        val ruleLower = rule.text.lowercase().trim()
+                        val isPersonRule = ruleLower.contains("from ") || ruleLower.contains("msg from") ||
+                                ruleLower.contains("message from") || ruleLower.contains("messages from")
+                        val isJobRule = ruleLower.contains("job") || ruleLower.contains("interview") ||
+                                ruleLower.contains("opening") || ruleLower.contains("hiring") || ruleLower.contains("career")
+
+                        if (isPersonRule) {
+                            // Extract person target name (e.g. "any message from Madhu is important" -> "madhu")
+                            val tokens = ruleLower.split(Regex("[^a-zA-Z0-9_]+")).filter { it.length >= 2 && it !in stopWords }
+                            val targetName = tokens.firstOrNull() ?: ""
+
+                            if (targetName.isNotEmpty()) {
+                                // Rule requires a direct chat message from the person
+                                val isDirectSenderMatch = !data.sender.isNullOrBlank() && matchesPersonName(targetName, data.sender)
+                                val isTitleSenderMatch = !data.title.isNullOrBlank() && !isMedia && !isNavigation && matchesPersonName(targetName, data.title)
+
+                                if ((isCommunicationApp || !isMedia && !isNavigation) && !isSocialReaction && (isDirectSenderMatch || isTitleSenderMatch)) {
+                                    matchedRule = rule
+                                    matchExplanation = "Message from ${data.sender ?: targetName} matching rule: ${rule.text}"
+                                    aiCategory = "messages"
+                                    break
+                                }
+                            }
+                        } else if (isJobRule) {
+                            // Job / Interview context check
+                            val jobKeywords = setOf(
+                                "job", "interview", "shortlist", "shortlisted", "offer", "hiring", "recruiter",
+                                "resume", "cv", "opening", "openings", "vacancy", "vacancies", "salary",
+                                "application", "career", "referral", "sde", "engineer", "internship", "test link"
+                            )
+                            val hasJobKeyword = jobKeywords.any { contentLower.contains(it) }
+                            // Reject commercial shopping ads mentioning 'chance', 'cashback', 'sale', 'recharge'
+                            val isCommercialAd = contentLower.contains("cashback") || contentLower.contains("recharge") ||
+                                    contentLower.contains("dth") || contentLower.contains("bigg boss") || contentLower.contains("price reveals") ||
+                                    contentLower.contains("discount") || contentLower.contains("flat ₹") || contentLower.contains("50% off")
+
+                            if (hasJobKeyword && !isCommercialAd) {
+                                matchedRule = rule
+                                matchExplanation = "Job related update matching rule: ${rule.text}"
+                                aiCategory = "jobs"
+                                break
+                            }
+                        } else {
+                            // General semantic rule
+                            val ruleTokens = ruleLower.split(Regex("[^a-zA-Z0-9_]+")).filter { it.length >= 3 && it !in stopWords }
+                            if (ruleTokens.isNotEmpty() && ruleTokens.all { contentLower.contains(it) }) {
+                                matchedRule = rule
+                                matchExplanation = "Matches user rule: ${rule.text}"
+                                aiCategory = "important"
+                                break
+                            }
+                        }
+                    }
+
+                    if (matchedRule != null) {
+                        isImportant = true
+                        shouldAlert = true
+                        decisionReason = matchExplanation ?: "Matches user rule: ${matchedRule.text}"
+                    } else {
+                        isImportant = false
+                        shouldAlert = false
+                        decisionReason = "General notification; no matching rule"
+                        aiCategory = "other"
+                    }
+
+                    // Respect explicit 'do not alert' rules
                     val isExplicitDoNotAlert = rules.any { rule ->
                         val rLower = rule.text.lowercase()
                         (rLower.contains("do not alert") || rLower.contains("dont alert") || rLower.contains("no alert") || rLower.contains("silent")) &&
