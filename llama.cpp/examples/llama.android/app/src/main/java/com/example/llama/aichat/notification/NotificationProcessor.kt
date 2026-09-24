@@ -85,7 +85,7 @@ class NotificationProcessor(
         // Exact or whitespace-insensitive match
         if (senderClean == targetClean) return true
 
-        // If target is specific (e.g. "krishnavardhan"), sender must match the specific name
+        // If target is specific (e.g. "krishnavardhan"), sender must match the full specific name
         if (targetClean.length >= 7) {
             return senderClean.contains(targetClean) || senderClean.startsWith(targetClean)
         }
@@ -127,7 +127,7 @@ class NotificationProcessor(
             val packageLower = data.packageName.lowercase().trim()
             val contentLower = "$senderLower $titleLower $textLower $appLower"
 
-            // 2. Identify App & Notification Type
+            // 2. Identify System & Ongoing Indicators
             val isMedia = data.category == "transport" ||
                     packageLower.contains("spotify") ||
                     packageLower.contains("music") ||
@@ -144,19 +144,12 @@ class NotificationProcessor(
                     titleLower.contains("screenshot") || textLower.contains("screenshot")
             val isSyncPlaceholder = textLower.contains("checking for new messages") || textLower.contains("searching for new messages")
 
-            // Social reactions / likes (Not direct personal messages)
+            // Social likes/reactions on shared posts (Not direct messages)
             val isSocialReaction = textLower.contains("liked your") || textLower.contains("liked a") ||
                     textLower.contains("liked _") || textLower.contains("liked ") ||
                     textLower.contains("reacted") || textLower.contains("started following") ||
                     textLower.contains("commented on") || textLower.contains("shared a reel") ||
                     titleLower.contains("liked your") || titleLower.contains("liked _")
-
-            // Communication / Chat App indicators
-            val isCommunicationApp = packageLower.contains("whatsapp") || packageLower.contains("telegram") ||
-                    packageLower.contains("messaging") || packageLower.contains("sms") ||
-                    packageLower.contains("signal") || packageLower.contains("discord") ||
-                    packageLower.contains("slack") || packageLower.contains("teams") ||
-                    (packageLower.contains("instagram") && !isSocialReaction && (titleLower.contains("message") || !data.sender.isNullOrBlank()))
 
             var isImportant = false
             var shouldAlert = false
@@ -182,7 +175,7 @@ class NotificationProcessor(
                         "important", "alert", "priority", "urgent", "on", "in", "notification",
                         "notifications", "about", "to", "the", "and", "with", "for", "msg", "msgs",
                         "sent", "by", "if", "its", "it's", "it", "someone", "anyone", "everyone",
-                        "related", "relating", "please"
+                        "related", "relating", "please", "be"
                     )
 
                     var matchedRule: NotificationRule? = null
@@ -192,53 +185,36 @@ class NotificationProcessor(
                         val ruleLower = rule.text.lowercase().trim()
                         val isPersonRule = ruleLower.contains("from ") || ruleLower.contains("msg from") ||
                                 ruleLower.contains("message from") || ruleLower.contains("messages from")
-                        val isJobRule = ruleLower.contains("job") || ruleLower.contains("interview") ||
-                                ruleLower.contains("opening") || ruleLower.contains("hiring") || ruleLower.contains("career")
 
                         if (isPersonRule) {
-                            // Extract person target name (e.g. "any message from Madhu is important" -> "madhu")
-                            val tokens = ruleLower.split(Regex("[^a-zA-Z0-9_]+")).filter { it.length >= 2 && it !in stopWords }
-                            val targetName = tokens.firstOrNull() ?: ""
+                            // Extract person target name from the rule
+                            val ruleTokens = ruleLower.split(Regex("[^a-zA-Z0-9_]+")).filter { it.length >= 2 && it !in stopWords }
+                            val targetName = ruleTokens.firstOrNull() ?: ""
 
                             if (targetName.isNotEmpty()) {
-                                // Rule requires a direct chat message from the person
                                 val isDirectSenderMatch = !data.sender.isNullOrBlank() && matchesPersonName(targetName, data.sender)
                                 val isTitleSenderMatch = !data.title.isNullOrBlank() && !isMedia && !isNavigation && matchesPersonName(targetName, data.title)
 
-                                if ((isCommunicationApp || !isMedia && !isNavigation) && !isSocialReaction && (isDirectSenderMatch || isTitleSenderMatch)) {
+                                if (!isMedia && !isNavigation && !isSocialReaction && (isDirectSenderMatch || isTitleSenderMatch)) {
                                     matchedRule = rule
                                     matchExplanation = "Message from ${data.sender ?: targetName} matching rule: ${rule.text}"
                                     aiCategory = "messages"
                                     break
                                 }
                             }
-                        } else if (isJobRule) {
-                            // Job / Interview context check
-                            val jobKeywords = setOf(
-                                "job", "interview", "shortlist", "shortlisted", "offer", "hiring", "recruiter",
-                                "resume", "cv", "opening", "openings", "vacancy", "vacancies", "salary",
-                                "application", "career", "referral", "sde", "engineer", "internship", "test link"
-                            )
-                            val hasJobKeyword = jobKeywords.any { contentLower.contains(it) }
-                            // Reject commercial shopping ads mentioning 'chance', 'cashback', 'sale', 'recharge'
-                            val isCommercialAd = contentLower.contains("cashback") || contentLower.contains("recharge") ||
-                                    contentLower.contains("dth") || contentLower.contains("bigg boss") || contentLower.contains("price reveals") ||
-                                    contentLower.contains("discount") || contentLower.contains("flat ₹") || contentLower.contains("50% off")
-
-                            if (hasJobKeyword && !isCommercialAd) {
-                                matchedRule = rule
-                                matchExplanation = "Job related update matching rule: ${rule.text}"
-                                aiCategory = "jobs"
-                                break
-                            }
                         } else {
-                            // General semantic rule
+                            // Dynamic semantic rule: Extract meaningful keyword tokens from the rule
                             val ruleTokens = ruleLower.split(Regex("[^a-zA-Z0-9_]+")).filter { it.length >= 3 && it !in stopWords }
-                            if (ruleTokens.isNotEmpty() && ruleTokens.all { contentLower.contains(it) }) {
-                                matchedRule = rule
-                                matchExplanation = "Matches user rule: ${rule.text}"
-                                aiCategory = "important"
-                                break
+                            if (ruleTokens.isNotEmpty()) {
+                                val allTokensMatch = ruleTokens.all { token ->
+                                    contentLower.split(Regex("[^a-zA-Z0-9_]+")).any { word -> word == token || word.startsWith(token) }
+                                }
+                                if (allTokensMatch) {
+                                    matchedRule = rule
+                                    matchExplanation = "Matches user rule: ${rule.text}"
+                                    aiCategory = "important"
+                                    break
+                                }
                             }
                         }
                     }
