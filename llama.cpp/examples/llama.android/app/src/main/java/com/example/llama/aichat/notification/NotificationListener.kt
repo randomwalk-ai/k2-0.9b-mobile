@@ -38,24 +38,17 @@ class NotificationListener : NotificationListenerService() {
     override fun onNotificationPosted(sbn: StatusBarNotification?) {
         if (sbn == null) return
 
-        // Skip our own notifications to avoid infinite loops
+        // 1. Skip our own app notifications to avoid loops
         if (sbn.packageName == packageName) return
-
-        // Skip ongoing system status indicators (e.g. charging progress, USB connection, foreground system meters)
-        if (sbn.isOngoing && (sbn.packageName == "com.android.systemui" || sbn.packageName == "android")) {
-            return
-        }
 
         val notification = sbn.notification ?: return
 
-        // Skip grouped summary notifications to prevent duplicate mixed multi-message entries
+        // 2. Skip grouped summary containers to prevent duplicate concatenated entries
         val isGroupSummary = (notification.flags and Notification.FLAG_GROUP_SUMMARY) != 0 || NotificationCompat.isGroupSummary(notification)
         if (isGroupSummary) {
-            Log.d("NotificationListener", "Skipping group summary notification from ${sbn.packageName}")
+            Log.d("NotificationListener", "Skipping group summary container from ${sbn.packageName}")
             return
         }
-
-        Log.d("NotificationListener", "Incoming notification from: ${sbn.packageName}")
 
         val extras = notification.extras ?: return
 
@@ -64,7 +57,7 @@ class NotificationListener : NotificationListenerService() {
         val bigText = extras.getCharSequence(Notification.EXTRA_BIG_TEXT)?.toString()?.trim()
         var sender: String? = null
 
-        // 1. Check EXTRA_MESSAGES text (MessagingStyle notifications - standard for WhatsApp, Telegram, Messages)
+        // 3. Extract message text for MessagingStyle notifications (WhatsApp, Telegram, Signal)
         try {
             val messages = extras.getParcelableArray(Notification.EXTRA_MESSAGES)
             if (!messages.isNullOrEmpty()) {
@@ -88,7 +81,7 @@ class NotificationListener : NotificationListenerService() {
             text = bigText
         }
 
-        // 2. Check EXTRA_TEXT_LINES (InboxStyle notifications) - strictly take the latest line only
+        // 4. Extract latest line for InboxStyle notifications
         val lines = extras.getCharSequenceArray(Notification.EXTRA_TEXT_LINES)
         if (!lines.isNullOrEmpty() && (text.isNullOrBlank() || text!!.contains("new message", ignoreCase = true))) {
             val lastLine = lines.lastOrNull()?.toString()?.trim()
@@ -99,14 +92,93 @@ class NotificationListener : NotificationListenerService() {
 
         val subText = extras.getCharSequence(Notification.EXTRA_SUB_TEXT)?.toString()?.trim()
 
+        val textAndTitleLower = "${title ?: ""} ${text ?: ""} ${bigText ?: ""} ${subText ?: ""}".lowercase()
+        val packageLower = sbn.packageName.lowercase()
+
+        // =========================================================================
+        // OUTBOUND & USER ACTION FILTER (Zero Storage / Zero Noise)
+        // Completely drop progress bars, user uploads, ongoing status, and screenshots
+        // =========================================================================
+
+        // A. Uploads, Downloads, Progress Bars (e.g. "Story uploading... 83%", "Story uploaded!")
+        val hasProgress = extras.containsKey(Notification.EXTRA_PROGRESS) || extras.getInt(Notification.EXTRA_PROGRESS_MAX, 0) > 0
+        val isProgressOrUpload = hasProgress ||
+                textAndTitleLower.contains("uploading") ||
+                textAndTitleLower.contains("story uploaded") ||
+                textAndTitleLower.contains("post uploaded") ||
+                textAndTitleLower.contains("downloading") ||
+                textAndTitleLower.contains("saving...") ||
+                textAndTitleLower.contains("sending...")
+
+        if (isProgressOrUpload) {
+            Log.d("NotificationListener", "Dropped outbound progress/upload notification from ${sbn.packageName}")
+            return
+        }
+
+        // B. Screenshots & Screen Captures
+        val isScreenshot = packageLower.contains("smartcapture") || packageLower.contains("screencapture") ||
+                packageLower.contains("screenshot") || textAndTitleLower.contains("screenshot")
+        if (isScreenshot) {
+            Log.d("NotificationListener", "Dropped screenshot notification from ${sbn.packageName}")
+            return
+        }
+
+        // C. Ongoing Media Controls & Active GPS Navigation
         val isMediaOrNav = notification.category == Notification.CATEGORY_TRANSPORT ||
                 notification.category == Notification.CATEGORY_NAVIGATION ||
-                sbn.packageName.contains("spotify") ||
-                sbn.packageName.contains("music") ||
-                sbn.packageName.contains("maps") ||
-                sbn.packageName.contains("waze")
+                packageLower.contains("spotify") ||
+                packageLower.contains("music") ||
+                packageLower.contains("audio") ||
+                packageLower.contains("maps") ||
+                packageLower.contains("waze")
 
-        // 3. Fallback sender extraction only for non-media / non-navigation notifications
+        if (isMediaOrNav && sbn.isOngoing) {
+            Log.d("NotificationListener", "Dropped ongoing media/nav session from ${sbn.packageName}")
+            return
+        }
+
+        // D. Outgoing Calls & Active In-Call Progress
+        val actions = notification.actions
+        val hasAnswerAction = actions?.any { action ->
+            val actionTitle = action.title?.toString() ?: ""
+            actionTitle.contains("Answer", ignoreCase = true) ||
+            actionTitle.contains("Accept", ignoreCase = true) ||
+            actionTitle.contains("Incoming", ignoreCase = true)
+        } ?: false
+
+        val isCallCategory = notification.category == Notification.CATEGORY_CALL ||
+                packageLower.contains("dialer") ||
+                packageLower.contains("telecom") ||
+                packageLower.contains("phone")
+
+        val isMissedCall = notification.category == Notification.CATEGORY_MISSED_CALL ||
+                (title?.contains("missed call", ignoreCase = true) == true) ||
+                (text?.contains("missed call", ignoreCase = true) == true)
+
+        val isIncomingCall = hasAnswerAction || isMissedCall
+
+        if (isCallCategory && sbn.isOngoing && !isIncomingCall) {
+            Log.d("NotificationListener", "Dropped outgoing/in-call session from ${sbn.packageName}")
+            return
+        }
+
+        // E. System Hardware Status & Device Maintenance Scans
+        val isSystemStatus = (packageLower == "com.android.systemui" || packageLower == "android" || packageLower.contains("devicesecurity")) &&
+                (textAndTitleLower.contains("charging") || textAndTitleLower.contains("battery") ||
+                 textAndTitleLower.contains("usb") || textAndTitleLower.contains("scanning phone"))
+        if (isSystemStatus) {
+            Log.d("NotificationListener", "Dropped system hardware/maintenance indicator from ${sbn.packageName}")
+            return
+        }
+
+        // F. Sync Check Placeholders
+        val isSyncPlaceholder = textAndTitleLower.contains("checking for new messages") || textAndTitleLower.contains("searching for new messages")
+        if (isSyncPlaceholder) {
+            Log.d("NotificationListener", "Dropped sync placeholder from ${sbn.packageName}")
+            return
+        }
+
+        // Fallback sender extraction for inbound messages
         if ((sender.isNullOrBlank() || sender.equals("You", ignoreCase = true)) && !isMediaOrNav) {
             val convTitle = extras.getCharSequence(NotificationCompat.EXTRA_CONVERSATION_TITLE)?.toString()?.trim()
             if (!convTitle.isNullOrBlank() && !convTitle.equals("You", ignoreCase = true)) {
@@ -120,31 +192,8 @@ class NotificationListener : NotificationListenerService() {
             }
         }
 
-        // 4. Identify incoming call vs outgoing/active in-call session
-        val actions = notification.actions
-        val hasAnswerAction = actions?.any { action ->
-            val actionTitle = action.title?.toString() ?: ""
-            actionTitle.contains("Answer", ignoreCase = true) ||
-            actionTitle.contains("Accept", ignoreCase = true) ||
-            actionTitle.contains("Incoming", ignoreCase = true)
-        } ?: false
-
-        val isCallCategory = notification.category == Notification.CATEGORY_CALL ||
-                sbn.packageName.contains("dialer") ||
-                sbn.packageName.contains("telecom") ||
-                sbn.packageName.contains("phone")
-
-        val isMissedCall = notification.category == Notification.CATEGORY_MISSED_CALL ||
-                (title?.contains("missed call", ignoreCase = true) == true) ||
-                (text?.contains("missed call", ignoreCase = true) == true)
-
-        val isIncomingCall = hasAnswerAction || isMissedCall
-
-        Log.d("NotificationListener", "Final Summary - App: ${sbn.packageName}, Sender: $sender, Title: $title, Text: ${text?.take(30)}..., isOngoing: ${sbn.isOngoing}, isIncomingCall: $isIncomingCall")
-
-        // Do not silently discard unless Android itself provides no usable content
         if (title.isNullOrBlank() && text.isNullOrBlank()) {
-            Log.d("NotificationListener", "Skipping TRULY empty notification from ${sbn.packageName}")
+            Log.d("NotificationListener", "Skipping empty notification from ${sbn.packageName}")
             return
         }
 

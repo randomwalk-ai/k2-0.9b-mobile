@@ -144,16 +144,23 @@ class NotificationProcessor(
             val packageLower = data.packageName.lowercase().trim()
             val contentLower = "$senderLower $titleLower $textLower $appLower"
 
-            // 2. Action & Noise Shielding Check (Never alert for ongoing user sessions or status meters)
-            val isMedia = data.category == "transport" ||
+            // 2. Action & Noise Shielding Check (Completely discard user sessions, uploads, and meters - Zero Storage)
+            val isUploadOrProgress = contentLower.contains("uploading") ||
+                    contentLower.contains("story uploaded") ||
+                    contentLower.contains("post uploaded") ||
+                    contentLower.contains("downloading") ||
+                    contentLower.contains("saving...") ||
+                    contentLower.contains("sending...")
+
+            val isMedia = (data.category == "transport" ||
                     packageLower.contains("spotify") ||
                     packageLower.contains("music") ||
                     packageLower.contains("audio") ||
-                    packageLower.contains("podcast")
+                    packageLower.contains("podcast")) && data.isOngoing
 
-            val isNavigation = data.category == "navigation" ||
+            val isNavigation = (data.category == "navigation" ||
                     packageLower.contains("maps") ||
-                    packageLower.contains("waze")
+                    packageLower.contains("waze")) && data.isOngoing
 
             val isCallCategory = data.category == "call" ||
                     packageLower.contains("dialer") ||
@@ -162,20 +169,24 @@ class NotificationProcessor(
 
             val isOngoingUserCall = data.isOngoing && isCallCategory && !data.isIncomingCall
 
-            val isSystemMeter = (packageLower == "com.android.systemui" || packageLower == "android") &&
-                    (titleLower.contains("charging") || textLower.contains("charging") ||
-                     titleLower.contains("battery") || textLower.contains("battery") ||
-                     titleLower.contains("usb") || textLower.contains("usb"))
+            val isSystemMeter = (packageLower == "com.android.systemui" || packageLower == "android" || packageLower.contains("devicesecurity")) &&
+                    (contentLower.contains("charging") || contentLower.contains("battery") ||
+                     contentLower.contains("usb") || contentLower.contains("scanning phone"))
 
-            val isScreenshot = packageLower.contains("screencapture") || packageLower.contains("screenshot") ||
-                    titleLower.contains("screenshot") || textLower.contains("screenshot")
+            val isScreenshot = packageLower.contains("screencapture") || packageLower.contains("smartcapture") ||
+                    packageLower.contains("screenshot") || contentLower.contains("screenshot")
 
-            val isSyncPlaceholder = textLower.contains("checking for new messages") || textLower.contains("searching for new messages")
+            val isSyncPlaceholder = contentLower.contains("checking for new messages") || contentLower.contains("searching for new messages")
 
-            val isSocialReaction = textLower.contains("liked your") || textLower.contains("liked a") ||
-                    textLower.contains("liked _") || textLower.contains("reacted to your") ||
-                    textLower.contains("started following") || textLower.contains("commented on") ||
-                    titleLower.contains("liked your") || titleLower.contains("liked _")
+            // Public social post likes / reactions (e.g. "5 likes on your comment", "liked your reel" - NOT a direct chat)
+            val isSocialReaction = contentLower.contains("liked your") || contentLower.contains("liked a") ||
+                    contentLower.contains("liked _") || contentLower.contains("reacted to your") ||
+                    contentLower.contains("started following") || contentLower.contains("commented on")
+
+            if (isUploadOrProgress || isOngoingUserCall || isMedia || isNavigation || isSystemMeter || isScreenshot || isSyncPlaceholder || isSocialReaction) {
+                Log.d("NotificationProcessor", "Discarding outbound/user action/progress event from ${data.packageName} (Zero DB storage)")
+                return
+            }
 
             var isImportant = false
             var shouldAlert = false
@@ -183,122 +194,101 @@ class NotificationProcessor(
             var finalSummary = defaultCleanSummary
             var aiCategory = "other"
 
-            if (isOngoingUserCall) {
-                decisionReason = "Outgoing or active in-call session (Silent)"
-                aiCategory = "call"
-            } else if (isMedia) {
-                decisionReason = "Active media playback (Silent)"
-                aiCategory = "media"
-            } else if (isNavigation) {
-                decisionReason = "Live navigation active (Silent)"
-                aiCategory = "navigation"
-            } else if (isSystemMeter || isScreenshot) {
-                decisionReason = if (isScreenshot) "Screenshot captured" else "System status update"
-                finalSummary = if (isScreenshot) "Screenshot saved" else defaultCleanSummary
-                aiCategory = "system"
-            } else if (isSyncPlaceholder) {
-                decisionReason = "Conversation sync placeholder"
-                aiCategory = "sync"
-            } else if (isSocialReaction) {
-                decisionReason = "Social activity update (Non-direct message)"
-                aiCategory = "social"
-            } else {
-                // 3. User Rules Evaluation (Dynamic Dual-Engine Routing)
-                val enabledRules = ruleRepository.getEnabledRules()
+            // 3. User Rules Evaluation (Dynamic Dual-Engine Routing)
+            val enabledRules = ruleRepository.getEnabledRules()
 
-                if (enabledRules.isEmpty()) {
-                    decisionReason = "No active user rules"
+            if (enabledRules.isEmpty()) {
+                decisionReason = "No active user rules"
+                aiCategory = "other"
+            } else {
+                val parsedRules = enabledRules.map { rule ->
+                    rule to RuleClassifier.classify(rule.text)
+                }
+
+                // Dynamic Candidate Gate: Identify all rules that have ANY correlation with this notification
+                val matchingCandidates = parsedRules.filter { (rule, parsed) ->
+                    val matchesSender = matchesPersonName(parsed.targetPerson, data.sender) ||
+                            (!isMedia && !isNavigation && matchesPersonName(parsed.targetPerson, data.title))
+
+                    val matchesTopic = parsed.dynamicAnchors.isNotEmpty() && parsed.dynamicAnchors.any { anchor ->
+                        textMatchesDynamicAnchor(contentLower, anchor)
+                    }
+
+                    matchesSender || matchesTopic
+                }
+
+                if (matchingCandidates.isEmpty()) {
+                    // Fast-Path Drop: Zero candidate match with any user rule (<1ms, 0 MB RAM, 0% CPU)
+                    Log.d("NotificationProcessor", "Fast-Path Drop (<1ms): Zero candidate match with ${enabledRules.size} user rules for sender '${data.sender ?: data.appName}'")
+                    isImportant = false
+                    shouldAlert = false
+                    decisionReason = "General notification; no matching rule"
                     aiCategory = "other"
                 } else {
-                    val parsedRules = enabledRules.map { rule ->
-                        rule to RuleClassifier.classify(rule.text)
-                    }
+                    val hasSemanticCandidate = matchingCandidates.any { it.second.intent == RuleIntent.SEMANTIC_CONDITIONAL }
 
-                    // Dynamic Candidate Gate: Identify all rules that have ANY correlation with this notification
-                    val matchingCandidates = parsedRules.filter { (rule, parsed) ->
-                        val matchesSender = matchesPersonName(parsed.targetPerson, data.sender) ||
-                                (!isMedia && !isNavigation && matchesPersonName(parsed.targetPerson, data.title))
+                    if (hasSemanticCandidate) {
+                        // Route to Engine B (K2 Horizon 0.9B AI) for deep contextual comprehension
+                        Log.d("NotificationProcessor", "Routing to Engine B (K2 AI): ${matchingCandidates.size} candidate rules matched for sender '${data.sender ?: data.appName}'")
+                        val prompt = K2PromptBuilder.buildPrompt(
+                            rules = enabledRules.map { it.text },
+                            appName = data.appName,
+                            packageName = data.packageName,
+                            title = data.title,
+                            text = data.text,
+                            sender = data.sender
+                        )
+                        Log.d("NotificationProcessor", "Engine B Prompt:\n$prompt")
 
-                        val matchesTopic = parsed.dynamicAnchors.isNotEmpty() && parsed.dynamicAnchors.any { anchor ->
-                            textMatchesDynamicAnchor(contentLower, anchor)
-                        }
+                        val aiResponse = inferenceManager.analyze(prompt)
+                        Log.d("NotificationProcessor", "Engine B Raw Response: $aiResponse")
+                        val analysis = K2ResponseParser.parse(aiResponse, defaultCleanSummary)
 
-                        matchesSender || matchesTopic
-                    }
-
-                    if (matchingCandidates.isEmpty()) {
-                        // Fast-Path Drop: Zero candidate match with any user rule (<1ms, 0 MB RAM, 0% CPU)
-                        Log.d("NotificationProcessor", "Fast-Path Drop (<1ms): Zero candidate match with ${enabledRules.size} user rules for sender '${data.sender ?: data.appName}'")
-                        isImportant = false
-                        shouldAlert = false
-                        decisionReason = "General notification; no matching rule"
-                        aiCategory = "other"
-                    } else {
-                        val hasSemanticCandidate = matchingCandidates.any { it.second.intent == RuleIntent.SEMANTIC_CONDITIONAL }
-
-                        if (hasSemanticCandidate) {
-                            // Route to Engine B (K2 Horizon 0.9B AI) for deep contextual comprehension
-                            Log.d("NotificationProcessor", "Routing to Engine B (K2 AI): ${matchingCandidates.size} candidate rules matched for sender '${data.sender ?: data.appName}'")
-                            val prompt = K2PromptBuilder.buildPrompt(
-                                rules = enabledRules.map { it.text },
-                                appName = data.appName,
-                                packageName = data.packageName,
-                                title = data.title,
-                                text = data.text,
-                                sender = data.sender
-                            )
-                            Log.d("NotificationProcessor", "Engine B Prompt:\n$prompt")
-
-                            val aiResponse = inferenceManager.analyze(prompt)
-                            Log.d("NotificationProcessor", "Engine B Raw Response: $aiResponse")
-                            val analysis = K2ResponseParser.parse(aiResponse, defaultCleanSummary)
-
-                            if (aiResponse != null) {
-                                isImportant = analysis.important
-                                shouldAlert = analysis.alert
-                                decisionReason = "[🧠 K2 AI] ${analysis.reason}"
-                                aiCategory = analysis.category
-                                if (analysis.summary.isNotBlank() && !analysis.summary.startsWith("Summary of", ignoreCase = true)) {
-                                    finalSummary = analysis.summary
-                                }
-                            } else {
-                                // Safe fallback if model is unavailable
-                                Log.w("NotificationProcessor", "Engine B unavailable; falling back to candidate rules")
-                                val directContact = matchingCandidates.firstOrNull { it.second.intent == RuleIntent.SIMPLE_CONTACT }
-                                if (directContact != null) {
-                                    isImportant = true
-                                    shouldAlert = true
-                                    decisionReason = "[⚡ Fast Rule Fallback] Matched ${directContact.first.text}"
-                                    aiCategory = "messages"
-                                } else {
-                                    isImportant = false
-                                    shouldAlert = false
-                                    decisionReason = "AI engine standby; no direct contact match"
-                                    aiCategory = "other"
-                                }
+                        if (aiResponse != null) {
+                            isImportant = analysis.important
+                            shouldAlert = analysis.alert
+                            decisionReason = "[🧠 K2 AI] ${analysis.reason}"
+                            aiCategory = analysis.category
+                            if (analysis.summary.isNotBlank() && !analysis.summary.startsWith("Summary of", ignoreCase = true)) {
+                                finalSummary = analysis.summary
                             }
                         } else {
-                            // Pure Fast-Path candidate resolution (<1ms)
-                            Log.d("NotificationProcessor", "Routing to Engine A (Fast Path <1ms): ${matchingCandidates.size} simple rules matched")
-                            val simpleBlock = matchingCandidates.firstOrNull { it.second.intent == RuleIntent.SIMPLE_BLOCK }
-                            if (simpleBlock != null) {
+                            // Safe fallback if model is unavailable
+                            Log.w("NotificationProcessor", "Engine B unavailable; falling back to candidate rules")
+                            val directContact = matchingCandidates.firstOrNull { it.second.intent == RuleIntent.SIMPLE_CONTACT }
+                            if (directContact != null) {
+                                isImportant = true
+                                shouldAlert = true
+                                decisionReason = "[⚡ Fast Rule Fallback] Matched ${directContact.first.text}"
+                                aiCategory = "messages"
+                            } else {
                                 isImportant = false
                                 shouldAlert = false
-                                decisionReason = "[⚡ Fast Rule] Blocked: ${simpleBlock.first.text}"
+                                decisionReason = "AI engine standby; no direct contact match"
                                 aiCategory = "other"
+                            }
+                        }
+                    } else {
+                        // Pure Fast-Path candidate resolution (<1ms)
+                        Log.d("NotificationProcessor", "Routing to Engine A (Fast Path <1ms): ${matchingCandidates.size} simple rules matched")
+                        val simpleBlock = matchingCandidates.firstOrNull { it.second.intent == RuleIntent.SIMPLE_BLOCK }
+                        if (simpleBlock != null) {
+                            isImportant = false
+                            shouldAlert = false
+                            decisionReason = "[⚡ Fast Rule] Blocked: ${simpleBlock.first.text}"
+                            aiCategory = "other"
+                        } else {
+                            val simpleContact = matchingCandidates.firstOrNull { it.second.intent == RuleIntent.SIMPLE_CONTACT }
+                            if (simpleContact != null) {
+                                isImportant = true
+                                shouldAlert = true
+                                decisionReason = "[⚡ Fast Rule] Matched: ${simpleContact.first.text}"
+                                aiCategory = "messages"
                             } else {
-                                val simpleContact = matchingCandidates.firstOrNull { it.second.intent == RuleIntent.SIMPLE_CONTACT }
-                                if (simpleContact != null) {
-                                    isImportant = true
-                                    shouldAlert = true
-                                    decisionReason = "[⚡ Fast Rule] Matched: ${simpleContact.first.text}"
-                                    aiCategory = "messages"
-                                } else {
-                                    isImportant = false
-                                    shouldAlert = false
-                                    decisionReason = "General notification; no matching rule"
-                                    aiCategory = "other"
-                                }
+                                isImportant = false
+                                shouldAlert = false
+                                decisionReason = "General notification; no matching rule"
+                                aiCategory = "other"
                             }
                         }
                     }
@@ -309,11 +299,8 @@ class NotificationProcessor(
                 finalSummary = defaultCleanSummary
             }
 
-            val latestByKey = notificationRepository.getLatestByKey(data.notificationKey)
-            val recordId = if ((isSystemMeter || isScreenshot) && latestByKey != null) latestByKey.id else 0L
-
             val record = NotificationRecord(
-                id = recordId,
+                id = 0L,
                 notificationKey = data.notificationKey,
                 packageName = data.packageName,
                 appName = data.appName,

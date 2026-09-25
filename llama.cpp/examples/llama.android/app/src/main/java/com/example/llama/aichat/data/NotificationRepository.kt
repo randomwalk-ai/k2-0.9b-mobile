@@ -52,4 +52,8 @@ class NotificationRepository(private val notificationDao: NotificationDao) {
     suspend fun delete(record: NotificationRecord) {
         notificationDao.delete(record)
     }
+
+    suspend fun purgeOutboundNoise() {
+        notificationDao.purgeOutboundNoise()
+    }
 }

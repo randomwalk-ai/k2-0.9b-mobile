@@ -91,10 +91,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     init {
         checkNotificationAccess()
 
-        // Clean up any historical notifications exceeding maximum 7-day retention
+        // Clean up any historical notifications exceeding maximum 7-day retention and purge outbound noise
         viewModelScope.launch(Dispatchers.IO) {
             val maxCutoff = System.currentTimeMillis() - (7 * 24 * 60 * 60 * 1000L)
             notificationRepo.deleteOlderThan(maxCutoff)
+            notificationRepo.purgeOutboundNoise()
         }
 
         // Maintain persistent notification shade summary in sync with important records

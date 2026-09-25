@@ -66,4 +66,14 @@ interface NotificationDao {
 
     @Update
     suspend fun update(record: NotificationRecord)
+
+    @Query("""
+        DELETE FROM notification_records 
+        WHERE title LIKE '%uploading%' OR text LIKE '%uploading%' 
+           OR title LIKE '%story uploaded%' OR text LIKE '%story uploaded%'
+           OR title LIKE '%screenshot%' OR text LIKE '%screenshot%'
+           OR packageName LIKE '%smartcapture%' OR packageName LIKE '%screencapture%'
+           OR text LIKE '%checking for new messages%'
+    """)
+    suspend fun purgeOutboundNoise()
 }
