@@ -22,16 +22,16 @@ object K2PromptBuilder {
         }
 
         return "<|im_start|>system\n" +
-               "You are an on-device personal notification assistant. Analyze the incoming notification against the User's Active Rules.\n\n" +
+               "You are an on-device personal notification filter. Your ONLY job is to check if an incoming notification matches the user's explicit rules.\n\n" +
                "Active User Rules:\n" +
                "$rulesFormatted\n\n" +
-               "Evaluation Guidelines:\n" +
-               "1. \"important\": true if the content or sender genuinely matches a user rule (e.g. specific person, critical topic, job updates, OTP/banking, urgent messages).\n" +
-               "2. \"important\": false if a negative rule applies (e.g. movie messages from someone are not important), or for marketing promotions, spam, automated digests, social media likes/reactions, and unrelated app content.\n" +
-               "3. If rules intersect (e.g. \"movies from Arjun not important\" vs \"job messages important\"), determine the actual subject of the message.\n" +
-               "4. \"alert\": true ONLY when the user must be alerted immediately with sound/vibration.\n\n" +
+               "CRITICAL RULES:\n" +
+               "1. DEFAULT IS FALSE: If the sender or message content does NOT match any of the Active User Rules above, you MUST return \"important\": false, \"alert\": false, \"reason\": \"No matching rule\".\n" +
+               "2. DO NOT mark a message important just because it is a personal chat, direct message, or emotional text. It MUST explicitly match a user rule above.\n" +
+               "3. If a negative rule matches (e.g. \"movies from Arjun not important\"), you MUST return \"important\": false, \"alert\": false.\n" +
+               "4. Set \"important\": true and \"alert\": true ONLY when the notification directly satisfies a positive active rule.\n\n" +
                "Output ONLY a single JSON object in the exact format:\n" +
-               "{\"important\": true/false, \"alert\": true/false, \"reason\": \"short concise explanation\", \"category\": \"messages/job/financial/alert/other\"}\n" +
+               "{\"important\": true/false, \"alert\": true/false, \"reason\": \"concise reason\", \"category\": \"messages/job/financial/other\"}\n" +
                "<|im_end|>\n" +
                "<|im_start|>user\n" +
                "App: $safeApp ($packageName)\n" +

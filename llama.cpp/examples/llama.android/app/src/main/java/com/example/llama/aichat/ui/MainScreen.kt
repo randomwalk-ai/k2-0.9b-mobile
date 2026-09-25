@@ -372,26 +372,26 @@ fun StatusSection(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Column {
-                    Text("AI Engine:", fontWeight = FontWeight.Medium)
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("AI Engine", fontWeight = FontWeight.Bold, fontSize = 13.sp)
                     Text("K2 Horizon 0.9B Q4 + Fast Engine", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.SemiBold)
-                    Text("On-device / 0% Cloud", fontSize = 12.sp, color = Color.Gray)
+                    Text("On-device · 0% Cloud", fontSize = 11.sp, color = Color.Gray)
                 }
-                Column(horizontalAlignment = Alignment.End) {
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
                     if (modelState == K2InferenceManager.State.ERROR) {
-                        Button(
+                        OutlinedButton(
                             onClick = onRetryClick,
-                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error)
                         ) {
-                            Text("RETRY")
+                            Text("Retry", fontSize = 12.sp)
                         }
                     }
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Button(
+                    FilledTonalButton(
                         onClick = onPickFileClick,
-                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
                     ) {
-                        Text("IMPORT MODEL")
+                        Text("Import", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
                     }
                 }
             }
@@ -410,7 +410,7 @@ fun StatusSection(
                 K2InferenceManager.State.UNLOADING -> Triple("Freeing RAM...", Color(0xFFFFA000), "Reclaiming memory")
                 K2InferenceManager.State.UNAVAILABLE -> Triple("Model Unavailable", Color.Red, "Import GGUF model to enable semantic AI")
                 K2InferenceManager.State.ERROR -> Triple("Engine Error", Color.Red, "Check storage permission or reload")
-                K2InferenceManager.State.UNINITIALIZED -> Triple("Standby (Zero RAM)", Color(0xFF81C784), "Wakes instantly on semantic rules; 0% idle battery")
+                K2InferenceManager.State.UNINITIALIZED -> Triple("Standby (Zero RAM)", Color(0xFF81C784), "Wakes on semantic rules · 0% idle battery")
             }
             Row(
                 verticalAlignment = Alignment.CenterVertically,

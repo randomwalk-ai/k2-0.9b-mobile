@@ -14,6 +14,7 @@ class K2AiTest {
         val rule = RuleClassifier.classify("any message from Madhu is important")
         assertEquals(RuleIntent.SIMPLE_CONTACT, rule.intent)
         assertEquals("madhu", rule.targetPerson)
+        assertTrue(rule.dynamicAnchors.isEmpty())
         assertFalse(rule.isNegative)
     }
 
@@ -22,6 +23,7 @@ class K2AiTest {
         val rule = RuleClassifier.classify("ignore messages from Bob")
         assertEquals(RuleIntent.SIMPLE_BLOCK, rule.intent)
         assertEquals("bob", rule.targetPerson)
+        assertTrue(rule.dynamicAnchors.isEmpty())
         assertTrue(rule.isNegative)
     }
 
@@ -30,14 +32,36 @@ class K2AiTest {
         val rule = RuleClassifier.classify("whatever message from arjun related to movies, it is never important")
         assertEquals(RuleIntent.SEMANTIC_CONDITIONAL, rule.intent)
         assertEquals("arjun", rule.targetPerson)
+        assertTrue(rule.dynamicAnchors.contains("movies"))
         assertTrue(rule.isNegative)
     }
 
     @Test
-    fun testRuleClassifierSemanticGeneralTopic() {
+    fun testRuleClassifierSemanticJobTopic() {
         val rule = RuleClassifier.classify("if someone messages about job related it is important")
         assertEquals(RuleIntent.SEMANTIC_CONDITIONAL, rule.intent)
+        assertNull(rule.targetPerson)
+        assertTrue(rule.dynamicAnchors.contains("job"))
         assertFalse(rule.isNegative)
+    }
+
+    @Test
+    fun testRuleClassifierDynamicBusinessInvoicingRule() {
+        val rule = RuleClassifier.classify("client payment confirmation or invoice is urgent")
+        assertEquals(RuleIntent.SEMANTIC_CONDITIONAL, rule.intent)
+        assertTrue(rule.dynamicAnchors.contains("client"))
+        assertTrue(rule.dynamicAnchors.contains("payment"))
+        assertTrue(rule.dynamicAnchors.contains("confirmation"))
+        assertTrue(rule.dynamicAnchors.contains("invoice"))
+    }
+
+    @Test
+    fun testRuleClassifierDynamicTechDowntimeRule() {
+        val rule = RuleClassifier.classify("server downtime alerts from pagerduty")
+        assertEquals(RuleIntent.SEMANTIC_CONDITIONAL, rule.intent)
+        assertEquals("pagerduty", rule.targetPerson)
+        assertTrue(rule.dynamicAnchors.contains("server"))
+        assertTrue(rule.dynamicAnchors.contains("downtime"))
     }
 
     @Test
