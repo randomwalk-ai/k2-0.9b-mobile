@@ -3,6 +3,10 @@ package com.example.llama.aichat.notification
 import android.content.Context
 import android.util.Log
 import com.example.llama.aichat.ai.K2InferenceManager
+import com.example.llama.aichat.ai.K2PromptBuilder
+import com.example.llama.aichat.ai.K2ResponseParser
+import com.example.llama.aichat.ai.RuleClassifier
+import com.example.llama.aichat.ai.RuleIntent
 import com.example.llama.aichat.data.NotificationRecord
 import com.example.llama.aichat.data.NotificationRepository
 import com.example.llama.aichat.data.NotificationRule
@@ -73,7 +77,8 @@ class NotificationProcessor(
         queue.trySend(data)
     }
 
-    private fun matchesPersonName(ruleTarget: String, senderName: String): Boolean {
+    private fun matchesPersonName(ruleTarget: String?, senderName: String?): Boolean {
+        if (ruleTarget.isNullOrBlank() || senderName.isNullOrBlank()) return false
         val target = ruleTarget.lowercase().trim()
         val targetClean = target.replace(" ", "")
         val sender = senderName.lowercase().trim()
@@ -127,24 +132,34 @@ class NotificationProcessor(
             val packageLower = data.packageName.lowercase().trim()
             val contentLower = "$senderLower $titleLower $textLower $appLower"
 
-            // 2. Identify System & Media Indicators
+            // 2. Action & Noise Shielding Check (Never alert for ongoing user sessions or status meters)
             val isMedia = data.category == "transport" ||
                     packageLower.contains("spotify") ||
                     packageLower.contains("music") ||
                     packageLower.contains("audio") ||
                     packageLower.contains("podcast")
+
             val isNavigation = data.category == "navigation" ||
                     packageLower.contains("maps") ||
                     packageLower.contains("waze")
+
+            val isCallCategory = data.category == "call" ||
+                    packageLower.contains("dialer") ||
+                    packageLower.contains("telecom") ||
+                    packageLower.contains("phone")
+
+            val isOngoingUserCall = data.isOngoing && isCallCategory && !data.isIncomingCall
+
             val isSystemMeter = (packageLower == "com.android.systemui" || packageLower == "android") &&
                     (titleLower.contains("charging") || textLower.contains("charging") ||
                      titleLower.contains("battery") || textLower.contains("battery") ||
                      titleLower.contains("usb") || textLower.contains("usb"))
+
             val isScreenshot = packageLower.contains("screencapture") || packageLower.contains("screenshot") ||
                     titleLower.contains("screenshot") || textLower.contains("screenshot")
+
             val isSyncPlaceholder = textLower.contains("checking for new messages") || textLower.contains("searching for new messages")
 
-            // Public social post likes / reactions (e.g. "devika liked your reel" - NOT a DM)
             val isSocialReaction = textLower.contains("liked your") || textLower.contains("liked a") ||
                     textLower.contains("liked _") || textLower.contains("reacted to your") ||
                     textLower.contains("started following") || textLower.contains("commented on") ||
@@ -156,119 +171,116 @@ class NotificationProcessor(
             var finalSummary = defaultCleanSummary
             var aiCategory = "other"
 
-            if (isSystemMeter || isScreenshot) {
+            if (isOngoingUserCall) {
+                decisionReason = "Outgoing or active in-call session (Silent)"
+                aiCategory = "call"
+            } else if (isMedia) {
+                decisionReason = "Active media playback (Silent)"
+                aiCategory = "media"
+            } else if (isNavigation) {
+                decisionReason = "Live navigation active (Silent)"
+                aiCategory = "navigation"
+            } else if (isSystemMeter || isScreenshot) {
                 decisionReason = if (isScreenshot) "Screenshot captured" else "System status update"
                 finalSummary = if (isScreenshot) "Screenshot saved" else defaultCleanSummary
                 aiCategory = "system"
             } else if (isSyncPlaceholder) {
                 decisionReason = "Conversation sync placeholder"
                 aiCategory = "sync"
+            } else if (isSocialReaction) {
+                decisionReason = "Social activity update (Non-direct message)"
+                aiCategory = "social"
             } else {
-                val rules = ruleRepository.getEnabledRules()
-                if (rules.isEmpty()) {
+                // 3. User Rules Evaluation (Dual-Engine Routing)
+                val enabledRules = ruleRepository.getEnabledRules()
+
+                if (enabledRules.isEmpty()) {
                     decisionReason = "No active user rules"
                     aiCategory = "other"
                 } else {
-                    val stopWords = setOf(
-                        "whatever", "messages", "message", "from", "any", "all", "every", "is", "are",
-                        "important", "alert", "priority", "urgent", "on", "in", "notification",
-                        "notifications", "about", "to", "the", "and", "with", "for", "msg", "msgs",
-                        "sent", "by", "if", "its", "it's", "it", "someone", "anyone", "everyone",
-                        "related", "relating", "please", "be", "never", "not", "dont", "do"
-                    )
-
-                    // 1. PRIORITY CHECK: Evaluate Negative / Block Rules First! (Overrides all other rules)
-                    val negativeRules = rules.filter { rule ->
-                        val rLower = rule.text.lowercase()
-                        rLower.contains("never important") || rLower.contains("not important") ||
-                        rLower.contains("never alert") || rLower.contains("do not alert") ||
-                        rLower.contains("dont alert") || rLower.contains("no alert") ||
-                        rLower.contains("ignore") || rLower.contains("block")
+                    val parsedRules = enabledRules.map { rule ->
+                        rule to RuleClassifier.classify(rule.text)
                     }
 
-                    var isBlockedByRule: NotificationRule? = null
-                    for (negRule in negativeRules) {
-                        val negLower = negRule.text.lowercase()
-                        val negTokens = negLower.split(Regex("[^a-zA-Z0-9_]+")).filter { it.length >= 2 && it !in stopWords }
-                        val isPersonNegRule = negLower.contains("from ") || negLower.contains("msg from") || negLower.contains("message from")
+                    val semanticRules = parsedRules.filter { it.second.intent == RuleIntent.SEMANTIC_CONDITIONAL }
+                    val simpleBlocks = parsedRules.filter { it.second.intent == RuleIntent.SIMPLE_BLOCK }
+                    val simpleContacts = parsedRules.filter { it.second.intent == RuleIntent.SIMPLE_CONTACT }
 
-                        if (isPersonNegRule && negTokens.isNotEmpty()) {
-                            val targetName = negTokens.first()
-                            val senderMatches = (!data.sender.isNullOrBlank() && matchesPersonName(targetName, data.sender)) ||
-                                    (!data.title.isNullOrBlank() && matchesPersonName(targetName, data.title))
-                            if (senderMatches) {
-                                isBlockedByRule = negRule
-                                break
+                    // Route to Engine B (K2 Semantic AI) if any active rule is semantic / conditional
+                    if (semanticRules.isNotEmpty()) {
+                        Log.d("NotificationProcessor", "Routing to Engine B (K2 Horizon 0.9B AI) for ${enabledRules.size} active rules")
+                        val prompt = K2PromptBuilder.buildPrompt(
+                            rules = enabledRules.map { it.text },
+                            appName = data.appName,
+                            packageName = data.packageName,
+                            title = data.title,
+                            text = data.text,
+                            sender = data.sender
+                        )
+
+                        val aiResponse = inferenceManager.analyze(prompt)
+                        val analysis = K2ResponseParser.parse(aiResponse, defaultCleanSummary)
+
+                        if (aiResponse != null) {
+                            isImportant = analysis.important
+                            shouldAlert = analysis.alert
+                            decisionReason = "[🧠 K2 AI] ${analysis.reason}"
+                            aiCategory = analysis.category
+                            if (analysis.summary.isNotBlank() && !analysis.summary.startsWith("Summary of", ignoreCase = true)) {
+                                finalSummary = analysis.summary
                             }
-                        } else if (negTokens.isNotEmpty()) {
-                            val allTokensMatch = negTokens.all { token ->
-                                contentLower.split(Regex("[^a-zA-Z0-9_]+")).any { word -> word == token || word.startsWith(token) }
-                            }
-                            if (allTokensMatch) {
-                                isBlockedByRule = negRule
-                                break
-                            }
-                        }
-                    }
-
-                    if (isBlockedByRule != null) {
-                        isImportant = false
-                        shouldAlert = false
-                        decisionReason = "Blocked by user rule: ${isBlockedByRule.text}"
-                        aiCategory = "other"
-                    } else {
-                        // 2. Evaluate Positive Rules
-                        val positiveRules = rules.filter { !negativeRules.contains(it) }
-                        var matchedRule: NotificationRule? = null
-                        var matchExplanation: String? = null
-
-                        for (rule in positiveRules) {
-                            val ruleLower = rule.text.lowercase().trim()
-                            val isPersonRule = ruleLower.contains("from ") || ruleLower.contains("msg from") ||
-                                    ruleLower.contains("message from") || ruleLower.contains("messages from")
-
-                            if (isPersonRule) {
-                                // Extract person target name from the rule
-                                val ruleTokens = ruleLower.split(Regex("[^a-zA-Z0-9_]+")).filter { it.length >= 2 && it !in stopWords }
-                                val targetName = ruleTokens.firstOrNull() ?: ""
-
-                                if (targetName.isNotEmpty()) {
-                                    val isDirectSenderMatch = !data.sender.isNullOrBlank() && matchesPersonName(targetName, data.sender)
-                                    val isTitleSenderMatch = !data.title.isNullOrBlank() && !isMedia && !isNavigation && matchesPersonName(targetName, data.title)
-
-                                    if (!isMedia && !isNavigation && !isSocialReaction && (isDirectSenderMatch || isTitleSenderMatch)) {
-                                        matchedRule = rule
-                                        matchExplanation = "Message from ${data.sender ?: targetName} matching rule: ${rule.text}"
-                                        aiCategory = "messages"
-                                        break
-                                    }
-                                }
-                            } else {
-                                // Dynamic semantic rule: Extract meaningful keyword tokens from the rule
-                                val ruleTokens = ruleLower.split(Regex("[^a-zA-Z0-9_]+")).filter { it.length >= 3 && it !in stopWords }
-                                if (ruleTokens.isNotEmpty()) {
-                                    val allTokensMatch = ruleTokens.all { token ->
-                                        contentLower.split(Regex("[^a-zA-Z0-9_]+")).any { word -> word == token || word.startsWith(token) }
-                                    }
-                                    if (allTokensMatch) {
-                                        matchedRule = rule
-                                        matchExplanation = "Matches user rule: ${rule.text}"
-                                        aiCategory = "important"
-                                        break
-                                    }
-                                }
-                            }
-                        }
-
-                        if (matchedRule != null) {
-                            isImportant = true
-                            shouldAlert = true
-                            decisionReason = matchExplanation ?: "Matches user rule: ${matchedRule.text}"
                         } else {
+                            // Safe fallback if model is unavailable
+                            Log.w("NotificationProcessor", "Engine B unavailable; falling back to Fast-Path checks")
+                            val matchedContact = simpleContacts.firstOrNull {
+                                matchesPersonName(it.second.targetPerson, data.sender) ||
+                                (!isMedia && !isNavigation && matchesPersonName(it.second.targetPerson, data.title))
+                            }
+                            if (matchedContact != null) {
+                                isImportant = true
+                                shouldAlert = true
+                                decisionReason = "[⚡ Fast Rule Fallback] Matched ${matchedContact.first.text}"
+                                aiCategory = "messages"
+                            } else {
+                                isImportant = false
+                                shouldAlert = false
+                                decisionReason = "AI engine standby; no direct contact match"
+                                aiCategory = "other"
+                            }
+                        }
+                    } else {
+                        // Route to Engine A (Fast-Path <1ms)
+                        Log.d("NotificationProcessor", "Routing to Engine A (Fast Path <1ms) - Simple rules only")
+
+                        // 1. Priority check for simple block rules
+                        val matchedBlock = simpleBlocks.firstOrNull {
+                            matchesPersonName(it.second.targetPerson, data.sender) ||
+                            matchesPersonName(it.second.targetPerson, data.title)
+                        }
+
+                        if (matchedBlock != null) {
                             isImportant = false
                             shouldAlert = false
-                            decisionReason = "General notification; no matching rule"
+                            decisionReason = "[⚡ Fast Rule] Blocked: ${matchedBlock.first.text}"
                             aiCategory = "other"
+                        } else {
+                            // 2. Check for simple contact match
+                            val matchedContact = simpleContacts.firstOrNull {
+                                matchesPersonName(it.second.targetPerson, data.sender) ||
+                                (!isMedia && !isNavigation && matchesPersonName(it.second.targetPerson, data.title))
+                            }
+
+                            if (matchedContact != null) {
+                                isImportant = true
+                                shouldAlert = true
+                                decisionReason = "[⚡ Fast Rule] Matched: ${matchedContact.first.text}"
+                                aiCategory = "messages"
+                            } else {
+                                isImportant = false
+                                shouldAlert = false
+                                decisionReason = "General notification; no matching rule"
+                                aiCategory = "other"
+                            }
                         }
                     }
                 }

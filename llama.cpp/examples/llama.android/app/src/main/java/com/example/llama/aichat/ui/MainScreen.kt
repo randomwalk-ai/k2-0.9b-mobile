@@ -27,6 +27,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.llama.aichat.ai.K2InferenceManager
+import com.example.llama.aichat.ai.RuleClassifier
+import com.example.llama.aichat.ai.RuleIntent
 import com.example.llama.aichat.data.NotificationRecord
 import com.example.llama.aichat.data.NotificationRule
 import java.text.SimpleDateFormat
@@ -260,7 +262,7 @@ fun MainScreen(
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
                 ) {
                     Text(
-                        "Your notifications are analyzed locally on this device using the K2 AI model. Notification content is never sent to a cloud AI service.",
+                        "Dual-Engine Personal AI Architecture:\n• Fast-Path Engine (<1ms) executes direct contact rules instantly without waking RAM.\n• K2 Horizon 0.9B On-Device AI resolves semantic, conditional, and multi-rule intersections on device.",
                         fontSize = 12.sp,
                         color = Color.Gray,
                         modifier = Modifier.padding(12.dp)
@@ -371,9 +373,9 @@ fun StatusSection(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Column {
-                    Text("AI Model:", fontWeight = FontWeight.Medium)
-                    Text("K2 Horizon 0.9B Q4", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurface)
-                    Text("Local / On-device", fontSize = 12.sp, color = Color.Gray)
+                    Text("AI Engine:", fontWeight = FontWeight.Medium)
+                    Text("K2 Horizon 0.9B Q4 + Fast Engine", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.SemiBold)
+                    Text("On-device / 0% Cloud", fontSize = 12.sp, color = Color.Gray)
                 }
                 Column(horizontalAlignment = Alignment.End) {
                     if (modelState == K2InferenceManager.State.ERROR) {
@@ -401,14 +403,14 @@ fun StatusSection(
                     modifier = Modifier.padding(top = 8.dp)
                 )
             }
-            val (stateText, stateColor) = when (modelState) {
-                K2InferenceManager.State.READY -> "Ready (Model Loaded)" to Color(0xFF4CAF50)
-                K2InferenceManager.State.INFERENCE -> "Analyzing..." to Color(0xFF00E5FF)
-                K2InferenceManager.State.LOADING -> "Loading / Copying..." to Color(0xFFFFA000)
-                K2InferenceManager.State.UNLOADING -> "Unloading..." to Color(0xFFFFA000)
-                K2InferenceManager.State.UNAVAILABLE -> "Unavailable" to Color.Red
-                K2InferenceManager.State.ERROR -> "Error" to Color.Red
-                K2InferenceManager.State.UNINITIALIZED -> "Standby (Unloaded)" to Color.Gray
+            val (stateText, stateColor, stateSubtitle) = when (modelState) {
+                K2InferenceManager.State.READY -> Triple("Ready (Model Active)", Color(0xFF4CAF50), "Fast & Semantic AI active")
+                K2InferenceManager.State.INFERENCE -> Triple("Analyzing with K2...", Color(0xFF00E5FF), "Evaluating multi-rule semantics")
+                K2InferenceManager.State.LOADING -> Triple("Loading Model...", Color(0xFFFFA000), "Preparing on-device weights")
+                K2InferenceManager.State.UNLOADING -> Triple("Freeing RAM...", Color(0xFFFFA000), "Reclaiming memory")
+                K2InferenceManager.State.UNAVAILABLE -> Triple("Model Unavailable", Color.Red, "Import GGUF model to enable semantic AI")
+                K2InferenceManager.State.ERROR -> Triple("Engine Error", Color.Red, "Check storage permission or reload")
+                K2InferenceManager.State.UNINITIALIZED -> Triple("Standby (Zero RAM)", Color(0xFF81C784), "Wakes instantly on semantic rules; 0% idle battery")
             }
             Row(
                 verticalAlignment = Alignment.CenterVertically,
@@ -420,7 +422,10 @@ fun StatusSection(
                         .background(stateColor, CircleShape)
                 )
                 Spacer(modifier = Modifier.width(6.dp))
-                Text(stateText, fontSize = 12.sp, color = stateColor, fontWeight = FontWeight.SemiBold)
+                Column {
+                    Text(stateText, fontSize = 12.sp, color = stateColor, fontWeight = FontWeight.SemiBold)
+                    Text(stateSubtitle, fontSize = 11.sp, color = Color.Gray)
+                }
             }
         }
     }
@@ -440,7 +445,7 @@ fun RulesSection(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text("RULES", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+            Text("ACTIVE RULES", fontWeight = FontWeight.Bold, fontSize = 14.sp)
             TextButton(onClick = onAddClick) {
                 Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
                 Spacer(modifier = Modifier.width(4.dp))
@@ -448,29 +453,110 @@ fun RulesSection(
             }
         }
         if (rules.isEmpty()) {
-            Text("No rules added yet. Tap '+ Add Rule' to define custom rules.", fontSize = 13.sp, color = Color.Gray)
+            Text("No rules defined. Tap '+ Add Rule' to configure custom routing.", fontSize = 13.sp, color = Color.Gray)
         } else {
             rules.forEach { rule ->
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Checkbox(checked = rule.enabled, onCheckedChange = { onToggle(rule) })
-                    Text(
-                        rule.text,
-                        modifier = Modifier
-                            .weight(1f)
-                            .clickable { onEdit(rule) },
-                        fontSize = 14.sp
+                val parsed = remember(rule.text) { RuleClassifier.classify(rule.text) }
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 4.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = if (rule.enabled) MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                        else MaterialTheme.colorScheme.surface.copy(alpha = 0.3f)
                     )
-                    IconButton(onClick = { onEdit(rule) }, modifier = Modifier.size(32.dp)) {
-                        Icon(Icons.Default.Edit, contentDescription = "Edit Rule", tint = Color.Gray, modifier = Modifier.size(18.dp))
-                    }
-                    IconButton(onClick = { onDelete(rule) }, modifier = Modifier.size(32.dp)) {
-                        Icon(Icons.Default.Delete, contentDescription = "Delete Rule", tint = Color.Gray, modifier = Modifier.size(18.dp))
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 8.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Checkbox(checked = rule.enabled, onCheckedChange = { onToggle(rule) })
+                        Column(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clickable { onEdit(rule) }
+                                .padding(horizontal = 4.dp)
+                        ) {
+                            Text(
+                                rule.text,
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = if (rule.enabled) MaterialTheme.colorScheme.onSurface else Color.Gray
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            // Rule engine badge
+                            Surface(
+                                shape = RoundedCornerShape(4.dp),
+                                color = when (parsed.intent) {
+                                    RuleIntent.SIMPLE_CONTACT -> Color(0xFF1B5E20).copy(alpha = 0.15f)
+                                    RuleIntent.SIMPLE_BLOCK -> Color(0xFFE65100).copy(alpha = 0.15f)
+                                    RuleIntent.SEMANTIC_CONDITIONAL -> Color(0xFF4A148C).copy(alpha = 0.15f)
+                                }
+                            ) {
+                                Text(
+                                    text = when (parsed.intent) {
+                                        RuleIntent.SIMPLE_CONTACT -> "⚡ Direct Contact (<1ms)"
+                                        RuleIntent.SIMPLE_BLOCK -> "⚡ Direct Block (<1ms)"
+                                        RuleIntent.SEMANTIC_CONDITIONAL -> "🧠 K2 Horizon AI Semantic"
+                                    },
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = when (parsed.intent) {
+                                        RuleIntent.SIMPLE_CONTACT -> Color(0xFF2E7D32)
+                                        RuleIntent.SIMPLE_BLOCK -> Color(0xFFEF6C00)
+                                        RuleIntent.SEMANTIC_CONDITIONAL -> Color(0xFF7B1FA2)
+                                    },
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                )
+                            }
+                        }
+                        IconButton(onClick = { onEdit(rule) }, modifier = Modifier.size(32.dp)) {
+                            Icon(Icons.Default.Edit, contentDescription = "Edit Rule", tint = Color.Gray, modifier = Modifier.size(16.dp))
+                        }
+                        IconButton(onClick = { onDelete(rule) }, modifier = Modifier.size(32.dp)) {
+                            Icon(Icons.Default.Delete, contentDescription = "Delete Rule", tint = Color.Gray, modifier = Modifier.size(16.dp))
+                        }
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+fun RetentionSection(
+    selectedPeriod: RetentionPeriod,
+    onClick: () -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column {
+                Text("RETENTION PERIOD", fontWeight = FontWeight.Bold)
+                Text(
+                    "Keep notifications for ${selectedPeriod.label}",
+                    fontSize = 13.sp,
+                    color = Color.Gray
+                )
+            }
+            Text(
+                "Change",
+                color = MaterialTheme.colorScheme.primary,
+                fontWeight = FontWeight.Bold,
+                fontSize = 13.sp
+            )
         }
     }
 }
@@ -481,13 +567,16 @@ fun NotificationItem(
     isImportant: Boolean,
     onClick: () -> Unit
 ) {
+    val isK2Ai = record.reason.contains("🧠 K2 AI") || record.reason.contains("[🧠 K2 AI]")
+    val isFastRule = record.reason.contains("⚡ Fast") || record.reason.contains("[⚡ Fast")
+
     Card(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick)
             .padding(vertical = 4.dp),
         colors = CardDefaults.cardColors(
-            containerColor = if (isImportant) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.25f)
+            containerColor = if (isImportant) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.22f)
             else MaterialTheme.colorScheme.surface
         ),
         elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
@@ -498,7 +587,7 @@ fun NotificationItem(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Badge for App & Category
+                // Badge for App & Sender
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     val appInfo = if (!record.sender.isNullOrBlank() && record.sender != record.appName) {
                         "${record.appName} · ${record.sender}"
@@ -513,34 +602,64 @@ fun NotificationItem(
                     )
                 }
 
-                // Urgency tag / timestamp
+                // Engine tag + Urgency tag + timestamp
                 Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (isK2Ai) {
+                        Surface(
+                            shape = CircleShape,
+                            color = Color(0xFF7B1FA2).copy(alpha = 0.15f),
+                            modifier = Modifier.padding(end = 4.dp)
+                        ) {
+                            Text(
+                                "🧠 K2 AI",
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF7B1FA2),
+                                modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp)
+                            )
+                        }
+                    } else if (isFastRule) {
+                        Surface(
+                            shape = CircleShape,
+                            color = Color(0xFF2E7D32).copy(alpha = 0.15f),
+                            modifier = Modifier.padding(end = 4.dp)
+                        ) {
+                            Text(
+                                "⚡ Fast",
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF2E7D32),
+                                modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp)
+                            )
+                        }
+                    }
+
                     if (record.important && record.alert) {
                         Surface(
                             shape = CircleShape,
                             color = MaterialTheme.colorScheme.errorContainer,
-                            modifier = Modifier.padding(end = 6.dp)
+                            modifier = Modifier.padding(end = 4.dp)
                         ) {
                             Text(
                                 "⚡ ALERT",
-                                fontSize = 10.sp,
+                                fontSize = 9.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onErrorContainer,
-                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp)
                             )
                         }
                     } else if (record.important) {
                         Surface(
                             shape = CircleShape,
                             color = MaterialTheme.colorScheme.primaryContainer,
-                            modifier = Modifier.padding(end = 6.dp)
+                            modifier = Modifier.padding(end = 4.dp)
                         ) {
                             Text(
                                 "⭐ IMPORTANT",
-                                fontSize = 10.sp,
+                                fontSize = 9.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onPrimaryContainer,
-                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp)
                             )
                         }
                     }
@@ -556,9 +675,9 @@ fun NotificationItem(
                 color = MaterialTheme.colorScheme.onBackground
             )
 
-            if (!record.reason.isBlank()) {
+            if (record.reason.isNotBlank()) {
                 Text(
-                    text = "AI: ${record.reason}",
+                    text = record.reason,
                     fontSize = 11.sp,
                     color = Color.Gray,
                     modifier = Modifier.padding(top = 4.dp)
@@ -575,6 +694,9 @@ fun NotificationDetailDialog(
     onDelete: () -> Unit,
     onAddRuleForSender: (String) -> Unit
 ) {
+    val isK2Ai = record.reason.contains("🧠 K2 AI") || record.reason.contains("[🧠 K2 AI]")
+    val isFastRule = record.reason.contains("⚡ Fast") || record.reason.contains("[⚡ Fast")
+
     AlertDialog(
         onDismissRequest = onDismiss,
         title = {
@@ -605,7 +727,7 @@ fun NotificationDetailDialog(
 
                 HorizontalDivider(modifier = Modifier.padding(vertical = 6.dp))
 
-                Text("AI Decision Reason:", fontWeight = FontWeight.SemiBold, fontSize = 12.sp, color = Color.Gray)
+                Text("AI Decision & Engine:", fontWeight = FontWeight.SemiBold, fontSize = 12.sp, color = Color.Gray)
                 Text(record.reason, fontSize = 13.sp, modifier = Modifier.padding(bottom = 6.dp))
 
                 Row(
@@ -663,20 +785,21 @@ fun AddRuleDialog(
     var text by remember { mutableStateOf(initialText) }
     val suggestions = listOf(
         "Urgent messages from Mom are important",
-        "OTP and verification codes are important",
-        "Delivery and courier updates are important",
-        "Bank transaction alerts are important"
+        "Whatever message from Arjun related to movies is never important",
+        "If someone messages about job related it is important",
+        "OTP and bank transaction alerts are important",
+        "Delivery and courier updates are important"
     )
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Add Rule") },
+        title = { Text("Add Personal Rule") },
         text = {
             Column {
                 OutlinedTextField(
                     value = text,
                     onValueChange = { text = it },
-                    placeholder = { Text("e.g. Urgent messages from Rahul are important.") },
+                    placeholder = { Text("e.g. Any message about job is important.") },
                     modifier = Modifier.fillMaxWidth()
                 )
 
@@ -698,17 +821,29 @@ fun AddRuleDialog(
             }
         },
         confirmButton = {
-            Button(onClick = { if (text.isNotBlank()) onConfirm(text) }) { Text("Add") }
+            Button(
+                onClick = { if (text.isNotBlank()) onConfirm(text) },
+                enabled = text.isNotBlank()
+            ) {
+                Text("Save")
+            }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Cancel") }
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
         }
     )
 }
 
 @Composable
-fun EditRuleDialog(rule: NotificationRule, onDismiss: () -> Unit, onConfirm: (String) -> Unit) {
+fun EditRuleDialog(
+    rule: NotificationRule,
+    onDismiss: () -> Unit,
+    onConfirm: (String) -> Unit
+) {
     var text by remember { mutableStateOf(rule.text) }
+
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Edit Rule") },
@@ -720,67 +855,19 @@ fun EditRuleDialog(rule: NotificationRule, onDismiss: () -> Unit, onConfirm: (St
             )
         },
         confirmButton = {
-            Button(onClick = { if (text.isNotBlank()) onConfirm(text) }) { Text("Save") }
+            Button(
+                onClick = { if (text.isNotBlank()) onConfirm(text) },
+                enabled = text.isNotBlank()
+            ) {
+                Text("Update")
+            }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Cancel") }
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
         }
     )
-}
-
-fun formatTime(timestamp: Long): String {
-    val sdf = SimpleDateFormat("h:mm a", Locale.getDefault())
-    return sdf.format(Date(timestamp))
-}
-
-@Composable
-fun RetentionSection(
-    selectedPeriod: RetentionPeriod,
-    onClick: () -> Unit
-) {
-    Surface(
-        onClick = onClick,
-        shape = RoundedCornerShape(12.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 12.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    "HISTORY RETENTION",
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 14.sp
-                )
-                Text(
-                    "Auto-expires after ${selectedPeriod.label}",
-                    fontSize = 12.sp,
-                    color = Color.Gray
-                )
-            }
-            Surface(
-                shape = RoundedCornerShape(8.dp),
-                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
-            ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        "${selectedPeriod.label} ▼",
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                }
-            }
-        }
-    }
 }
 
 @Composable
@@ -791,43 +878,45 @@ fun RetentionDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Notification Retention Period", fontWeight = FontWeight.Bold) },
+        title = { Text("Notification Retention") },
         text = {
             Column {
-                Text(
-                    "Select how long notifications are kept in history before expiring automatically:",
-                    fontSize = 13.sp,
-                    color = Color.Gray
-                )
-                Spacer(modifier = Modifier.height(12.dp))
                 RetentionPeriod.entries.forEach { period ->
-                    val isSelected = period == currentPeriod
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clickable { onSelect(period) }
-                            .padding(vertical = 8.dp),
+                            .padding(vertical = 12.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         RadioButton(
-                            selected = isSelected,
+                            selected = period == currentPeriod,
                             onClick = { onSelect(period) }
                         )
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = if (period == RetentionPeriod.HOURS_24) "${period.label} (Default)" else period.label,
-                            fontSize = 15.sp,
-                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                            color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
-                        )
+                        Text(period.label, fontSize = 15.sp)
                     }
                 }
             }
         },
         confirmButton = {
-            TextButton(onClick = onDismiss) { Text("Close") }
+            TextButton(onClick = onDismiss) {
+                Text("Close")
+            }
         }
     )
 }
 
-
+private fun formatTime(timestamp: Long): String {
+    val now = System.currentTimeMillis()
+    val diff = now - timestamp
+    return when {
+        diff < 60_000L -> "Just now"
+        diff < 3600_000L -> "${diff / 60_000L}m ago"
+        diff < 86400_000L -> "${diff / 3600_000L}h ago"
+        else -> {
+            val sdf = SimpleDateFormat("MMM d, h:mm a", Locale.getDefault())
+            sdf.format(Date(timestamp))
+        }
+    }
+}

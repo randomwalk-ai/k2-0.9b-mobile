@@ -9,5 +9,7 @@ data class NotificationData(
     val sender: String?,
     val category: String?,
     val notificationKey: String,
-    val timestamp: Long
+    val timestamp: Long,
+    val isOngoing: Boolean = false,
+    val isIncomingCall: Boolean = false
 )

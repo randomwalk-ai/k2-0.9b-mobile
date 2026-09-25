@@ -1,7 +1,5 @@
 package com.example.llama.aichat.ai
 
-import org.json.JSONObject
-
 data class NotificationAnalysis(
     val important: Boolean,
     val alert: Boolean,
@@ -15,57 +13,39 @@ object K2ResponseParser {
     fun parse(rawResponse: String?, defaultSummary: String = "Notification received"): NotificationAnalysis {
         if (rawResponse.isNullOrBlank()) return fallback(defaultSummary)
 
-        var fullText = rawResponse.trim()
-        if (!fullText.startsWith("{") && (fullText.startsWith("true") || fullText.startsWith("false") || fullText.startsWith(" true") || fullText.startsWith(" false"))) {
-            fullText = "{\"important\": $fullText"
-        } else if (!fullText.startsWith("{") && fullText.contains("\"alert\"")) {
-            fullText = "{\"important\": $fullText"
+        val text = rawResponse.trim()
+
+        // Extract values via robust regex
+        val importantRegex = Regex("\"important\"\\s*:\\s*(true|false)", RegexOption.IGNORE_CASE)
+        val alertRegex = Regex("\"alert\"\\s*:\\s*(true|false)", RegexOption.IGNORE_CASE)
+        val reasonRegex = Regex("\"reason\"\\s*:\\s*\"([^\"]*)\"", RegexOption.IGNORE_CASE)
+        val summaryRegex = Regex("\"summary\"\\s*:\\s*\"([^\"]*)\"", RegexOption.IGNORE_CASE)
+        val categoryRegex = Regex("\"category\"\\s*:\\s*\"([^\"]*)\"", RegexOption.IGNORE_CASE)
+
+        val importantMatch = importantRegex.find(text)?.groupValues?.get(1)?.toBooleanStrictOrNull()
+        val alertMatch = alertRegex.find(text)?.groupValues?.get(1)?.toBooleanStrictOrNull()
+        val reasonMatch = reasonRegex.find(text)?.groupValues?.get(1)
+        val summaryMatch = summaryRegex.find(text)?.groupValues?.get(1)
+        val categoryMatch = categoryRegex.find(text)?.groupValues?.get(1)
+
+        val isImportant = importantMatch ?: when {
+            text.startsWith("true", ignoreCase = true) -> true
+            text.startsWith("false", ignoreCase = true) -> false
+            else -> false
         }
 
-        // 1. Try finding JSON block
-        val start = fullText.indexOf('{')
-        val end = fullText.lastIndexOf('}')
-        if (start != -1 && end != -1 && end > start) {
-            val jsonCandidate = fullText.substring(start, end + 1)
-            try {
-                val json = JSONObject(jsonCandidate)
-                val important = json.optBoolean("important", false)
-                val alert = if (important) json.optBoolean("alert", false) else false
-                val reason = json.optString("reason", if (important) "Matches user rules" else "General notification")
-                val summary = json.optString("summary", defaultSummary).ifBlank { defaultSummary }
-                val category = json.optString("category", if (important) "important" else "other")
+        val isAlert = if (isImportant) (alertMatch ?: false) else false
+        val reason = reasonMatch?.ifBlank { null } ?: if (isImportant) "Matches user rules" else "General notification"
+        val summary = summaryMatch?.ifBlank { null } ?: defaultSummary
+        val category = categoryMatch?.ifBlank { null } ?: if (isImportant) "important" else "other"
 
-                return NotificationAnalysis(
-                    important = important,
-                    alert = alert,
-                    reason = reason,
-                    summary = summary,
-                    category = category
-                )
-            } catch (e: Exception) {
-                // fallback to key-value inspection
-            }
-        }
-
-        // 2. Resilient text parsing for key-value outputs
-        val lower = fullText.lowercase()
-        val hasImportantTrue = lower.contains("\"important\": true") || lower.contains("\"important\":true") || 
-                lower.contains("important: true") || lower.contains("important:true") || lower.startsWith("true")
-        val hasImportantFalse = lower.contains("\"important\": false") || lower.contains("\"important\":false") || 
-                lower.contains("important: false") || lower.contains("important:false") || lower.startsWith("false")
-
-        if (hasImportantTrue && !hasImportantFalse) {
-            val hasAlertTrue = lower.contains("\"alert\": true") || lower.contains("alert: true")
-            return NotificationAnalysis(
-                important = true,
-                alert = hasAlertTrue,
-                reason = "Matches user rules",
-                summary = defaultSummary,
-                category = "important"
-            )
-        }
-
-        return fallback(defaultSummary)
+        return NotificationAnalysis(
+            important = isImportant,
+            alert = isAlert,
+            reason = reason,
+            summary = summary,
+            category = category
+        )
     }
 
     private fun fallback(summary: String) = NotificationAnalysis(

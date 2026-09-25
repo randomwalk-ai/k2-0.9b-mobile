@@ -22,15 +22,16 @@ object K2PromptBuilder {
         }
 
         return "<|im_start|>system\n" +
-               "You are an on-device personal notification filter. Evaluate if the notification is IMPORTANT based strictly on the User's Active Rules.\n" +
-               "Rules:\n" +
+               "You are an on-device personal notification assistant. Analyze the incoming notification against the User's Active Rules.\n\n" +
+               "Active User Rules:\n" +
                "$rulesFormatted\n\n" +
-               "Instructions:\n" +
-               "1. \"important\": true if the notification genuinely matches the user's intent or rules (e.g. sender, critical topic, urgent transaction, direct actionable message).\n" +
-               "2. \"important\": false for promotional ads, discount offers, newsletter blasts, or coincidental keyword matches in unrelated apps (e.g. a song title or street name).\n" +
-               "3. \"alert\": true ONLY if this notification requires immediate chime/vibration.\n" +
-               "Output ONLY a single JSON object in this format:\n" +
-               "{\"important\": true/false, \"alert\": true/false, \"reason\": \"concise explanation\"}\n" +
+               "Evaluation Guidelines:\n" +
+               "1. \"important\": true if the content or sender genuinely matches a user rule (e.g. specific person, critical topic, job updates, OTP/banking, urgent messages).\n" +
+               "2. \"important\": false if a negative rule applies (e.g. movie messages from someone are not important), or for marketing promotions, spam, automated digests, social media likes/reactions, and unrelated app content.\n" +
+               "3. If rules intersect (e.g. \"movies from Arjun not important\" vs \"job messages important\"), determine the actual subject of the message.\n" +
+               "4. \"alert\": true ONLY when the user must be alerted immediately with sound/vibration.\n\n" +
+               "Output ONLY a single JSON object in the exact format:\n" +
+               "{\"important\": true/false, \"alert\": true/false, \"reason\": \"short concise explanation\", \"category\": \"messages/job/financial/alert/other\"}\n" +
                "<|im_end|>\n" +
                "<|im_start|>user\n" +
                "App: $safeApp ($packageName)\n" +
@@ -39,7 +40,6 @@ object K2PromptBuilder {
                "Content: $safeText\n\n" +
                "JSON:\n" +
                "<|im_end|>\n" +
-               "<|im_start|>assistant\n" +
-               "{\"important\":"
+               "<|im_start|>assistant\n"
     }
 }

@@ -88,7 +88,7 @@ class NotificationListener : NotificationListenerService() {
             text = bigText
         }
 
-        // 2. Check EXTRA_TEXT_LINES (InboxStyle notifications) - strictly take the latest line only (NO concatenation!)
+        // 2. Check EXTRA_TEXT_LINES (InboxStyle notifications) - strictly take the latest line only
         val lines = extras.getCharSequenceArray(Notification.EXTRA_TEXT_LINES)
         if (!lines.isNullOrEmpty() && (text.isNullOrBlank() || text!!.contains("new message", ignoreCase = true))) {
             val lastLine = lines.lastOrNull()?.toString()?.trim()
@@ -120,7 +120,27 @@ class NotificationListener : NotificationListenerService() {
             }
         }
 
-        Log.d("NotificationListener", "Final Summary - App: ${sbn.packageName}, Sender: $sender, Title: $title, Text: ${text?.take(30)}...")
+        // 4. Identify incoming call vs outgoing/active in-call session
+        val actions = notification.actions
+        val hasAnswerAction = actions?.any { action ->
+            val actionTitle = action.title?.toString() ?: ""
+            actionTitle.contains("Answer", ignoreCase = true) ||
+            actionTitle.contains("Accept", ignoreCase = true) ||
+            actionTitle.contains("Incoming", ignoreCase = true)
+        } ?: false
+
+        val isCallCategory = notification.category == Notification.CATEGORY_CALL ||
+                sbn.packageName.contains("dialer") ||
+                sbn.packageName.contains("telecom") ||
+                sbn.packageName.contains("phone")
+
+        val isMissedCall = notification.category == Notification.CATEGORY_MISSED_CALL ||
+                (title?.contains("missed call", ignoreCase = true) == true) ||
+                (text?.contains("missed call", ignoreCase = true) == true)
+
+        val isIncomingCall = hasAnswerAction || isMissedCall
+
+        Log.d("NotificationListener", "Final Summary - App: ${sbn.packageName}, Sender: $sender, Title: $title, Text: ${text?.take(30)}..., isOngoing: ${sbn.isOngoing}, isIncomingCall: $isIncomingCall")
 
         // Do not silently discard unless Android itself provides no usable content
         if (title.isNullOrBlank() && text.isNullOrBlank()) {
@@ -145,7 +165,9 @@ class NotificationListener : NotificationListenerService() {
             sender = sender,
             category = notification.category,
             notificationKey = sbn.key ?: "${sbn.packageName}_${sbn.id}_${sbn.postTime}",
-            timestamp = sbn.postTime
+            timestamp = sbn.postTime,
+            isOngoing = sbn.isOngoing,
+            isIncomingCall = isIncomingCall
         )
 
         processor.process(notificationData)
