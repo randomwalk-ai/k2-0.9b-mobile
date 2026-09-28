@@ -77,29 +77,73 @@ class NotificationProcessor(
         queue.trySend(data)
     }
 
-    private fun matchesPersonName(ruleTarget: String?, senderName: String?): Boolean {
-        if (ruleTarget.isNullOrBlank() || senderName.isNullOrBlank()) return false
-        val target = ruleTarget.lowercase().trim()
-        val targetClean = target.replace(" ", "")
-        val sender = senderName.lowercase().trim()
-        val senderClean = sender.replace(" ", "")
-        val senderWords = sender.split(Regex("[^a-zA-Z0-9_]+")).filter { it.length >= 2 }
+    fun isSenderMatch(ruleTarget: String?, data: NotificationData): Boolean {
+        if (ruleTarget.isNullOrBlank()) return false
 
-        if (target.isEmpty() || sender.isEmpty()) return false
-
-        // Exact or whitespace-insensitive match
-        if (senderClean == targetClean) return true
-
-        // If target is specific (e.g. "krishnavardhan"), sender must match the full specific name
-        if (targetClean.length >= 7) {
-            return senderClean.contains(targetClean) || senderClean.startsWith(targetClean)
+        // 1. Direct sender from MessagingStyle (e.g. "Arjun_Vasireddy", "Madhu")
+        if (!data.sender.isNullOrBlank() && !data.sender.equals(data.appName, ignoreCase = true)) {
+            if (matchesPersonName(ruleTarget, data.sender)) {
+                return true
+            }
         }
 
-        // If target is root (e.g. "krishna", "madhu", "arjun"), sender words or clean sender must start with target
-        return senderWords.any { it == target || it.startsWith(target) } || senderClean.startsWith(targetClean) || senderClean.contains(targetClean)
+        // 2. Notification title for 1-on-1 chats, SMS, or Phone / Missed Calls
+        if (!data.title.isNullOrBlank() && !data.title.equals(data.appName, ignoreCase = true)) {
+            if (matchesPersonName(ruleTarget, data.title)) {
+                return true
+            }
+        }
+
+        // 3. Sender prefix in text for group messages (e.g. "Madhu: Hi everyone")
+        val text = data.text?.trim()
+        if (!text.isNullOrBlank() && text.contains(":")) {
+            val possiblePrefix = text.substringBefore(":").trim()
+            if (possiblePrefix.length in 2..30 && !possiblePrefix.contains("\n") && !possiblePrefix.contains(".")) {
+                if (matchesPersonName(ruleTarget, possiblePrefix)) {
+                    return true
+                }
+            }
+        }
+
+        return false
     }
 
-    private fun textMatchesDynamicAnchor(content: String, anchor: String): Boolean {
+    fun matchesPersonName(ruleTarget: String?, candidateName: String?): Boolean {
+        if (ruleTarget.isNullOrBlank() || candidateName.isNullOrBlank()) return false
+        val target = ruleTarget.lowercase().trim()
+        val targetClean = target.replace(" ", "")
+        val candidate = candidateName.lowercase().trim()
+        val candidateClean = candidate.replace(" ", "")
+        val candidateWords = candidate.split(Regex("[^a-zA-Z0-9_]+")).filter { it.length >= 2 }
+
+        if (target.isEmpty() || candidate.isEmpty()) return false
+
+        // Exact match
+        if (candidateClean == targetClean) return true
+
+        // Check word parts (e.g. "Arjun" in "Arjun_Vasireddy" or "Arjun Vasireddy")
+        for (word in candidateWords) {
+            val wordClean = word.replace("_", "")
+            if (wordClean == targetClean || wordClean.startsWith(targetClean)) {
+                return true
+            }
+        }
+
+        // Prefix match (e.g. "arjun_vasireddy" starts with "arjun")
+        val candidateNoUnderscore = candidateClean.replace("_", "")
+        if (candidateNoUnderscore.startsWith(targetClean)) {
+            return true
+        }
+
+        // Substring match for longer specific targets (e.g. "krishnavardhan")
+        if (targetClean.length >= 6 && candidateClean.contains(targetClean)) {
+            return true
+        }
+
+        return false
+    }
+
+    fun textMatchesDynamicAnchor(content: String, anchor: String): Boolean {
         val cleanAnchor = anchor.trim().lowercase()
         if (cleanAnchor.length < 3) return false
         val words = content.split(Regex("[^a-zA-Z0-9_]+")).filter { it.length >= 2 }
@@ -130,7 +174,15 @@ class NotificationProcessor(
                 return
             }
 
+            val isMissedCall = data.category == "missed_call" ||
+                    data.title?.contains("missed call", ignoreCase = true) == true ||
+                    data.text?.contains("missed call", ignoreCase = true) == true
+
             val defaultCleanSummary = when {
+                isMissedCall -> {
+                    val caller = data.sender ?: data.text ?: data.title ?: "Unknown"
+                    "Missed call: $caller"
+                }
                 !data.sender.isNullOrBlank() && !data.text.isNullOrBlank() && data.sender != data.appName -> "${data.sender}: ${data.text}"
                 !data.text.isNullOrBlank() -> "${data.appName}: ${data.text}"
                 !data.title.isNullOrBlank() -> data.title
@@ -144,47 +196,16 @@ class NotificationProcessor(
             val packageLower = data.packageName.lowercase().trim()
             val contentLower = "$senderLower $titleLower $textLower $appLower"
 
-            // 2. Action & Noise Shielding Check (Completely discard user sessions, uploads, and meters - Zero Storage)
-            val isUploadOrProgress = contentLower.contains("uploading") ||
-                    contentLower.contains("story uploaded") ||
-                    contentLower.contains("post uploaded") ||
-                    contentLower.contains("downloading") ||
-                    contentLower.contains("saving...") ||
-                    contentLower.contains("sending...")
+            // 2. Action & Noise Shielding Check (Zero DB storage for background transport, navigation, or progress)
+            val isMedia = data.category == "transport"
+            val isNavigation = data.category == "navigation" && data.isOngoing
+            val isOngoingUserCall = data.category == "call" && data.isOngoing && !data.isIncomingCall
+            val isSystemApp = data.packageName == "android" || data.packageName == "com.android.systemui"
+            val isSystemMeter = isSystemApp && (data.category == "status" || data.category == "sys" || data.category == "service")
+            val isProgress = data.category == "progress" && data.isOngoing
 
-            val isMedia = (data.category == "transport" ||
-                    packageLower.contains("spotify") ||
-                    packageLower.contains("music") ||
-                    packageLower.contains("audio") ||
-                    packageLower.contains("podcast")) && data.isOngoing
-
-            val isNavigation = (data.category == "navigation" ||
-                    packageLower.contains("maps") ||
-                    packageLower.contains("waze")) && data.isOngoing
-
-            val isCallCategory = data.category == "call" ||
-                    packageLower.contains("dialer") ||
-                    packageLower.contains("telecom") ||
-                    packageLower.contains("phone")
-
-            val isOngoingUserCall = data.isOngoing && isCallCategory && !data.isIncomingCall
-
-            val isSystemMeter = (packageLower == "com.android.systemui" || packageLower == "android" || packageLower.contains("devicesecurity")) &&
-                    (contentLower.contains("charging") || contentLower.contains("battery") ||
-                     contentLower.contains("usb") || contentLower.contains("scanning phone"))
-
-            val isScreenshot = packageLower.contains("screencapture") || packageLower.contains("smartcapture") ||
-                    packageLower.contains("screenshot") || contentLower.contains("screenshot")
-
-            val isSyncPlaceholder = contentLower.contains("checking for new messages") || contentLower.contains("searching for new messages")
-
-            // Public social post likes / reactions (e.g. "5 likes on your comment", "liked your reel" - NOT a direct chat)
-            val isSocialReaction = contentLower.contains("liked your") || contentLower.contains("liked a") ||
-                    contentLower.contains("liked _") || contentLower.contains("reacted to your") ||
-                    contentLower.contains("started following") || contentLower.contains("commented on")
-
-            if (isUploadOrProgress || isOngoingUserCall || isMedia || isNavigation || isSystemMeter || isScreenshot || isSyncPlaceholder || isSocialReaction) {
-                Log.d("NotificationProcessor", "Discarding outbound/user action/progress event from ${data.packageName} (Zero DB storage)")
+            if (isMedia || isNavigation || isOngoingUserCall || isSystemMeter || isProgress) {
+                Log.d("NotificationProcessor", "Discarding background session/system event from ${data.packageName} (Zero DB storage)")
                 return
             }
 
@@ -207,14 +228,33 @@ class NotificationProcessor(
 
                 // Dynamic Candidate Gate: Identify all rules that have ANY correlation with this notification
                 val matchingCandidates = parsedRules.filter { (rule, parsed) ->
-                    val matchesSender = matchesPersonName(parsed.targetPerson, data.sender) ||
-                            (!isMedia && !isNavigation && matchesPersonName(parsed.targetPerson, data.title))
+                    when (parsed.intent) {
+                        RuleIntent.SIMPLE_CONTACT, RuleIntent.SIMPLE_BLOCK -> {
+                            // Strict sender identity matching only (Zero text body leakage)
+                            isSenderMatch(parsed.targetPerson, data)
+                        }
+                        RuleIntent.SEMANTIC_CONDITIONAL -> {
+                            val senderMatch = if (!parsed.targetPerson.isNullOrBlank()) {
+                                isSenderMatch(parsed.targetPerson, data)
+                            } else {
+                                false
+                            }
 
-                    val matchesTopic = parsed.dynamicAnchors.isNotEmpty() && parsed.dynamicAnchors.any { anchor ->
-                        textMatchesDynamicAnchor(contentLower, anchor)
+                            val positiveTopicMatch = parsed.dynamicAnchors.isNotEmpty() && parsed.dynamicAnchors.any { anchor ->
+                                textMatchesDynamicAnchor(contentLower, anchor)
+                            }
+
+                            val exclusionTopicMatch = parsed.excludedAnchors.isNotEmpty() && parsed.excludedAnchors.any { anchor ->
+                                textMatchesDynamicAnchor(contentLower, anchor)
+                            }
+
+                            if (!parsed.targetPerson.isNullOrBlank()) {
+                                senderMatch || positiveTopicMatch || exclusionTopicMatch
+                            } else {
+                                positiveTopicMatch || exclusionTopicMatch
+                            }
+                        }
                     }
-
-                    matchesSender || matchesTopic
                 }
 
                 if (matchingCandidates.isEmpty()) {
@@ -225,11 +265,29 @@ class NotificationProcessor(
                     decisionReason = "General notification; no matching rule"
                     aiCategory = "other"
                 } else {
-                    val hasSemanticCandidate = matchingCandidates.any { it.second.intent == RuleIntent.SEMANTIC_CONDITIONAL }
+                    // Deterministic Exclusion Check: If message matches an explicit exclusion topic for a matching sender rule
+                    val exclusionMatch = matchingCandidates.firstOrNull { (_, parsed) ->
+                        val senderMatches = parsed.targetPerson == null || isSenderMatch(parsed.targetPerson, data)
+                        senderMatches && (
+                            (parsed.isNegative && parsed.dynamicAnchors.any { textMatchesDynamicAnchor(contentLower, it) }) ||
+                            (parsed.excludedAnchors.isNotEmpty() && parsed.excludedAnchors.any { textMatchesDynamicAnchor(contentLower, it) })
+                        )
+                    }
 
-                    if (hasSemanticCandidate) {
-                        // Route to Engine B (K2 Horizon 0.9B AI) for deep contextual comprehension
-                        Log.d("NotificationProcessor", "Routing to Engine B (K2 AI): ${matchingCandidates.size} candidate rules matched for sender '${data.sender ?: data.appName}'")
+                    if (exclusionMatch != null) {
+                        val (_, parsed) = exclusionMatch
+                        val excludedTopic = (parsed.dynamicAnchors + parsed.excludedAnchors).firstOrNull { textMatchesDynamicAnchor(contentLower, it) } ?: "excluded topic"
+                        Log.d("NotificationProcessor", "Exclusion guardrail triggered (<1ms): Filtered by topic '$excludedTopic' for sender '${data.sender ?: data.appName}'")
+                        isImportant = false
+                        shouldAlert = false
+                        decisionReason = "[🧠 AI Filter] Filtered: related to $excludedTopic"
+                        aiCategory = "other"
+                    } else {
+                        val hasSemanticCandidate = matchingCandidates.any { it.second.intent == RuleIntent.SEMANTIC_CONDITIONAL }
+
+                        if (hasSemanticCandidate) {
+                            // Route to Engine B (K2 Horizon 0.9B AI) for deep contextual comprehension
+                            Log.d("NotificationProcessor", "Routing to Engine B (K2 AI): ${matchingCandidates.size} candidate rules matched for sender '${data.sender ?: data.appName}'")
                         val prompt = K2PromptBuilder.buildPrompt(
                             rules = enabledRules.map { it.text },
                             appName = data.appName,
@@ -283,7 +341,7 @@ class NotificationProcessor(
                                 isImportant = true
                                 shouldAlert = true
                                 decisionReason = "[⚡ Fast Rule] Matched: ${simpleContact.first.text}"
-                                aiCategory = "messages"
+                                aiCategory = if (data.category == "call" || isMissedCall) "calls" else "messages"
                             } else {
                                 isImportant = false
                                 shouldAlert = false
@@ -293,6 +351,7 @@ class NotificationProcessor(
                         }
                     }
                 }
+            }
             }
 
             if (finalSummary.isBlank() || finalSummary.startsWith("Summary of", ignoreCase = true)) {

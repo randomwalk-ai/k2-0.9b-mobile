@@ -8,7 +8,10 @@ class K2LocalLLM(private val engine: InferenceEngine) : LocalLLM {
 
     override suspend fun generate(prompt: String, maxTokens: Int): String {
         val result = StringBuilder()
-        var hasStartedJson = false
+        if (prompt.trimEnd().endsWith("{")) {
+            result.append("{")
+        }
+        var hasStartedJson = result.contains("{")
         var hasEndedJson = false
 
         engine.sendUserPrompt(prompt, maxTokens)
@@ -18,7 +21,7 @@ class K2LocalLLM(private val engine: InferenceEngine) : LocalLLM {
                 if (result.contains("{")) {
                     hasStartedJson = true
                 }
-                if (hasStartedJson && token.contains("}")) {
+                if (hasStartedJson && (token.contains("}") || token.contains("<|im_end|>") || token.contains("<|endoftext|>"))) {
                     hasEndedJson = true
                 }
             }

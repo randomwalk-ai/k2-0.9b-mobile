@@ -32,8 +32,10 @@ app.add_middleware(
 # Initialize database
 db.init_db()
 
-# Serve static files
+# Serve static files and documentation
 app.mount("/static", StaticFiles(directory="static"), name="static")
+if os.path.exists("docs"):
+    app.mount("/docs", StaticFiles(directory="docs"), name="docs")
 
 class CreateChatRequest(BaseModel):
     model: str # "0.9b" or "7b"
@@ -55,6 +57,11 @@ class EditMessageRequest(BaseModel):
 @app.get("/")
 async def root():
     return FileResponse("static/index.html")
+
+@app.get("/blog")
+@app.get("/blog.html")
+async def blog():
+    return FileResponse("static/blog.html")
 
 @app.get("/api/status")
 async def get_status():

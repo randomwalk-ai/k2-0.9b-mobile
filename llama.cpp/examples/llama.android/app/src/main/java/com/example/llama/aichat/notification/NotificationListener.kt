@@ -57,7 +57,7 @@ class NotificationListener : NotificationListenerService() {
         val bigText = extras.getCharSequence(Notification.EXTRA_BIG_TEXT)?.toString()?.trim()
         var sender: String? = null
 
-        // 3. Extract message text for MessagingStyle notifications (WhatsApp, Telegram, Signal)
+        // 3. Extract message text for MessagingStyle notifications (WhatsApp, Telegram, Signal, SMS)
         try {
             val messages = extras.getParcelableArray(Notification.EXTRA_MESSAGES)
             if (!messages.isNullOrEmpty()) {
@@ -92,52 +92,40 @@ class NotificationListener : NotificationListenerService() {
 
         val subText = extras.getCharSequence(Notification.EXTRA_SUB_TEXT)?.toString()?.trim()
 
-        val textAndTitleLower = "${title ?: ""} ${text ?: ""} ${bigText ?: ""} ${subText ?: ""}".lowercase()
-        val packageLower = sbn.packageName.lowercase()
-
         // =========================================================================
-        // OUTBOUND & USER ACTION FILTER (Zero Storage / Zero Noise)
-        // Completely drop progress bars, user uploads, ongoing status, and screenshots
+        // OS-LEVEL STANDARDIZED FILTERS (Zero Hardcoding / Zero DB Storage)
+        // Uses official Android notification categories, extras, styles, and flags
         // =========================================================================
 
-        // A. Uploads, Downloads, Progress Bars (e.g. "Story uploading... 83%", "Story uploaded!")
-        val hasProgress = extras.containsKey(Notification.EXTRA_PROGRESS) || extras.getInt(Notification.EXTRA_PROGRESS_MAX, 0) > 0
-        val isProgressOrUpload = hasProgress ||
-                textAndTitleLower.contains("uploading") ||
-                textAndTitleLower.contains("story uploaded") ||
-                textAndTitleLower.contains("post uploaded") ||
-                textAndTitleLower.contains("downloading") ||
-                textAndTitleLower.contains("saving...") ||
-                textAndTitleLower.contains("sending...")
+        // A. Media Playback & Transport Controls (Spotify, Music, Podcasts, Audio Players)
+        val isMedia = notification.category == Notification.CATEGORY_TRANSPORT ||
+                extras.containsKey(Notification.EXTRA_MEDIA_SESSION) ||
+                extras.containsKey("android.mediaSession") ||
+                extras.getString(Notification.EXTRA_TEMPLATE)?.contains("MediaStyle", ignoreCase = true) == true
 
-        if (isProgressOrUpload) {
-            Log.d("NotificationListener", "Dropped outbound progress/upload notification from ${sbn.packageName}")
+        if (isMedia) {
+            Log.d("NotificationListener", "Dropped media transport notification from ${sbn.packageName}")
             return
         }
 
-        // B. Screenshots & Screen Captures
-        val isScreenshot = packageLower.contains("smartcapture") || packageLower.contains("screencapture") ||
-                packageLower.contains("screenshot") || textAndTitleLower.contains("screenshot")
-        if (isScreenshot) {
-            Log.d("NotificationListener", "Dropped screenshot notification from ${sbn.packageName}")
+        // B. Active File Uploads / Downloads / Progress Meters
+        val hasProgress = extras.getInt(Notification.EXTRA_PROGRESS_MAX, 0) > 0 ||
+                extras.containsKey(Notification.EXTRA_PROGRESS) ||
+                notification.category == Notification.CATEGORY_PROGRESS
+
+        if (hasProgress && sbn.isOngoing) {
+            Log.d("NotificationListener", "Dropped ongoing progress/upload notification from ${sbn.packageName}")
             return
         }
 
-        // C. Ongoing Media Controls & Active GPS Navigation
-        val isMediaOrNav = notification.category == Notification.CATEGORY_TRANSPORT ||
-                notification.category == Notification.CATEGORY_NAVIGATION ||
-                packageLower.contains("spotify") ||
-                packageLower.contains("music") ||
-                packageLower.contains("audio") ||
-                packageLower.contains("maps") ||
-                packageLower.contains("waze")
-
-        if (isMediaOrNav && sbn.isOngoing) {
-            Log.d("NotificationListener", "Dropped ongoing media/nav session from ${sbn.packageName}")
+        // C. Active GPS Navigation & Route Updates
+        val isNavigation = notification.category == Notification.CATEGORY_NAVIGATION
+        if (isNavigation && sbn.isOngoing) {
+            Log.d("NotificationListener", "Dropped ongoing navigation session from ${sbn.packageName}")
             return
         }
 
-        // D. Outgoing Calls & Active In-Call Progress
+        // D. Outgoing / Active In-Call Sessions (Keep Incoming & Missed Calls)
         val actions = notification.actions
         val hasAnswerAction = actions?.any { action ->
             val actionTitle = action.title?.toString() ?: ""
@@ -146,11 +134,7 @@ class NotificationListener : NotificationListenerService() {
             actionTitle.contains("Incoming", ignoreCase = true)
         } ?: false
 
-        val isCallCategory = notification.category == Notification.CATEGORY_CALL ||
-                packageLower.contains("dialer") ||
-                packageLower.contains("telecom") ||
-                packageLower.contains("phone")
-
+        val isCallCategory = notification.category == Notification.CATEGORY_CALL
         val isMissedCall = notification.category == Notification.CATEGORY_MISSED_CALL ||
                 (title?.contains("missed call", ignoreCase = true) == true) ||
                 (text?.contains("missed call", ignoreCase = true) == true)
@@ -158,36 +142,40 @@ class NotificationListener : NotificationListenerService() {
         val isIncomingCall = hasAnswerAction || isMissedCall
 
         if (isCallCategory && sbn.isOngoing && !isIncomingCall) {
-            Log.d("NotificationListener", "Dropped outgoing/in-call session from ${sbn.packageName}")
+            Log.d("NotificationListener", "Dropped ongoing in-call session from ${sbn.packageName}")
             return
         }
 
-        // E. System Hardware Status & Device Maintenance Scans
-        val isSystemStatus = (packageLower == "com.android.systemui" || packageLower == "android" || packageLower.contains("devicesecurity")) &&
-                (textAndTitleLower.contains("charging") || textAndTitleLower.contains("battery") ||
-                 textAndTitleLower.contains("usb") || textAndTitleLower.contains("scanning phone"))
+        // E. System Hardware & Maintenance Status Indicators
+        val isSystemApp = sbn.packageName == "android" || sbn.packageName == "com.android.systemui"
+        val isSystemStatus = isSystemApp && (
+            notification.category == Notification.CATEGORY_SYSTEM ||
+            notification.category == Notification.CATEGORY_STATUS ||
+            notification.category == Notification.CATEGORY_SERVICE
+        )
+
         if (isSystemStatus) {
-            Log.d("NotificationListener", "Dropped system hardware/maintenance indicator from ${sbn.packageName}")
+            Log.d("NotificationListener", "Dropped system status indicator from ${sbn.packageName}")
             return
         }
 
-        // F. Sync Check Placeholders
-        val isSyncPlaceholder = textAndTitleLower.contains("checking for new messages") || textAndTitleLower.contains("searching for new messages")
-        if (isSyncPlaceholder) {
-            Log.d("NotificationListener", "Dropped sync placeholder from ${sbn.packageName}")
-            return
-        }
+        // =========================================================================
+        // SENDER RESOLUTION
+        // =========================================================================
 
-        // Fallback sender extraction for inbound messages
-        if ((sender.isNullOrBlank() || sender.equals("You", ignoreCase = true)) && !isMediaOrNav) {
+        // 1. Fallback conversation title
+        if (sender.isNullOrBlank() || sender.equals("You", ignoreCase = true)) {
             val convTitle = extras.getCharSequence(NotificationCompat.EXTRA_CONVERSATION_TITLE)?.toString()?.trim()
             if (!convTitle.isNullOrBlank() && !convTitle.equals("You", ignoreCase = true)) {
                 sender = convTitle
             }
         }
 
-        if ((sender.isNullOrBlank() || sender.equals("You", ignoreCase = true)) && !isMediaOrNav) {
-            if (!title.isNullOrBlank() && !title.equals("You", ignoreCase = true)) {
+        // 2. Standard title fallback / Missed Call contact extraction
+        if (sender.isNullOrBlank() || sender.equals("You", ignoreCase = true)) {
+            if (isMissedCall && !text.isNullOrBlank()) {
+                sender = text
+            } else if (!title.isNullOrBlank() && !title.equals("You", ignoreCase = true)) {
                 sender = title
             }
         }

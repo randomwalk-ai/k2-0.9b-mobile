@@ -11,35 +11,34 @@ object K2PromptBuilder {
         sender: String?
     ): String {
         val safeApp = appName.ifBlank { "App" }
-        val safeSender = if (!sender.isNullOrBlank() && sender != safeApp) sender else "N/A"
-        val safeTitle = title?.ifBlank { "" } ?: ""
-        val safeText = text?.ifBlank { "" } ?: ""
+        val safeSender = if (!sender.isNullOrBlank() && sender != safeApp) sender else (title?.ifBlank { "N/A" } ?: "N/A")
+        val safeText = text?.ifBlank { title ?: "" } ?: ""
 
         val rulesFormatted = if (rules.isEmpty()) {
-            "- (No active rules)"
+            "- No active rules"
         } else {
-            rules.joinToString("\n") { "- ${it.trim()}" }
+            rules.mapIndexed { idx, r -> "${idx + 1}. ${r.trim()}" }.joinToString("\n")
         }
 
         return "<|im_start|>system\n" +
-               "You are an on-device personal notification filter. Your ONLY job is to check if an incoming notification matches the user's explicit rules.\n\n" +
-               "Active User Rules:\n" +
+               "You are an on-device personal notification assistant. Your job is to classify incoming notifications strictly according to the active user rules.\n\n" +
+               "User Rules:\n" +
                "$rulesFormatted\n\n" +
-               "CRITICAL RULES:\n" +
-               "1. DEFAULT IS FALSE: If the sender or message content does NOT match any of the Active User Rules above, you MUST return \"important\": false, \"alert\": false, \"reason\": \"No matching rule\".\n" +
-               "2. DO NOT mark a message important just because it is a personal chat, direct message, or emotional text. It MUST explicitly match a user rule above.\n" +
-               "3. If a negative rule matches (e.g. \"movies from Arjun not important\"), you MUST return \"important\": false, \"alert\": false.\n" +
-               "4. Set \"important\": true and \"alert\": true ONLY when the notification directly satisfies a positive active rule.\n\n" +
+               "Evaluation Rules:\n" +
+               "1. POSITIVE MATCH: If the notification satisfies the sender, keyword, or topic conditions of an active user rule, set \"important\": true, \"alert\": true.\n" +
+               "2. EXCEPTIONS & NEGATIONS: If an active rule specifies an exclusion or exception for a sender or topic, and the notification content falls under that exclusion, set \"important\": false, \"alert\": false.\n" +
+               "3. DEFAULT TO UNIMPORTANT: If the notification does not match any active user rule, set \"important\": false, \"alert\": false, \"reason\": \"No matching rule\".\n\n" +
                "Output ONLY a single JSON object in the exact format:\n" +
-               "{\"important\": true/false, \"alert\": true/false, \"reason\": \"concise reason\", \"category\": \"messages/job/financial/other\"}\n" +
+               "{\"important\": true/false, \"alert\": true/false, \"reason\": \"brief explanation\", \"category\": \"messages/job/financial/other\"}\n" +
                "<|im_end|>\n" +
                "<|im_start|>user\n" +
-               "App: $safeApp ($packageName)\n" +
-               "Sender: $safeSender\n" +
-               "Title: $safeTitle\n" +
-               "Content: $safeText\n\n" +
-               "JSON:\n" +
+               "Incoming Notification:\n" +
+               "- App: $safeApp ($packageName)\n" +
+               "- Sender: $safeSender\n" +
+               "- Message: $safeText\n\n" +
+               "Classify this notification in JSON:\n" +
                "<|im_end|>\n" +
-               "<|im_start|>assistant\n"
+               "<|im_start|>assistant\n" +
+               "{"
     }
 }
