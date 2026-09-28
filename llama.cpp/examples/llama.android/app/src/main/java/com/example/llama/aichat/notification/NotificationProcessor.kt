@@ -275,9 +275,24 @@ class NotificationProcessor(
                 var executedViaK2 = false
 
                 if (candidateDeepRule != null) {
-                    Log.d("NotificationProcessor", "Candidate matched K2_DEEP rule: ${candidateDeepRule.text}. Routing to K2 LLM...")
+                    val relevantRules = enabledRules.filter { rule ->
+                        val targetPerson = rule.targetPerson
+                        val targetApps = rule.getTargetApps()
+                        val isPersonRule = !targetPerson.isNullOrBlank()
+                        val isAppRule = targetApps.isNotEmpty()
+
+                        val senderMatches = isPersonRule && isSenderMatch(targetPerson, data)
+                        val appMatch = if (isAppRule) {
+                            targetApps.any { targetApp ->
+                                packageLower.contains(targetApp.lowercase()) || appLower.contains(targetApp.lowercase())
+                            }
+                        } else false
+
+                        (isPersonRule && senderMatches) || (isAppRule && appMatch) || (!isPersonRule && !isAppRule)
+                    }
+
                     val prompt = K2PromptBuilder.buildPrompt(
-                        rules = enabledRules.map { it.text },
+                        rules = relevantRules.map { it.text },
                         appName = data.appName,
                         packageName = data.packageName,
                         title = data.title,
