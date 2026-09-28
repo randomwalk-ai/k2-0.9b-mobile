@@ -42,4 +42,38 @@ object K2PromptBuilder {
                "<|im_start|>assistant\n" +
                "{"
     }
+
+    fun buildConditionPrompt(
+        rule: String,
+        appName: String,
+        packageName: String,
+        title: String?,
+        text: String?,
+        sender: String?
+    ): String {
+        val safeApp = appName.ifBlank { "App" }
+        val safeSender = if (!sender.isNullOrBlank() && sender != safeApp) sender else (title?.ifBlank { "N/A" } ?: "N/A")
+        val safeText = text?.ifBlank { title ?: "" } ?: ""
+
+        return "<|im_start|>system\n" +
+               "You are an on-device personal notification assistant. Evaluate whether the incoming notification meets the specific condition described in the user rule.\n\n" +
+               "Target Rule:\n" +
+               "${rule.trim()}\n\n" +
+               "Evaluation Guidelines:\n" +
+               "1. Determine objectively if the notification content, tone, or context satisfies the specific condition described in the rule.\n" +
+               "2. For emotional or subjective conditions, distinguish genuine hostility, conflict, or stated emotion from calm discussion, positive remarks, and friendly banter.\n" +
+               "3. Set \"condition_matched\": true if the condition is satisfied; otherwise set \"condition_matched\": false.\n\n" +
+               "Output ONLY a single JSON object in the exact format:\n" +
+               "{\"condition_matched\": true/false, \"reason\": \"brief explanation\", \"category\": \"messages/work/banking/delivery/other\"}\n" +
+               "<|im_end|>\n" +
+               "<|im_start|>user\n" +
+               "Incoming Notification:\n" +
+               "- App: $safeApp ($packageName)\n" +
+               "- Sender: $safeSender\n" +
+               "- Message: $safeText\n\n" +
+               "Evaluate condition in JSON:\n" +
+               "<|im_end|>\n" +
+               "<|im_start|>assistant\n" +
+               "{"
+    }
 }

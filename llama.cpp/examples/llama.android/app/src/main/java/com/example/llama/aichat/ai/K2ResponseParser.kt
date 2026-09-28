@@ -63,4 +63,38 @@ object K2ResponseParser {
         summary = summary,
         category = "other"
     )
+
+    fun parseConditionResult(rawResponse: String?): SemanticConditionResult {
+        if (rawResponse.isNullOrBlank()) {
+            return SemanticConditionResult(conditionMatched = false, reason = "Model unavailable", category = "other")
+        }
+        val text = rawResponse.trim()
+        val conditionRegex = Regex("\"condition_matched\"\\s*:\\s*(true|false)", RegexOption.IGNORE_CASE)
+        val importantRegex = Regex("\"important\"\\s*:\\s*(true|false)", RegexOption.IGNORE_CASE)
+        val reasonRegex = Regex("\"reason\"\\s*:\\s*\"([^\"]*)\"", RegexOption.IGNORE_CASE)
+        val categoryRegex = Regex("\"category\"\\s*:\\s*\"([^\"]*)\"", RegexOption.IGNORE_CASE)
+
+        val condMatch = conditionRegex.find(text)?.groupValues?.get(1)?.toBooleanStrictOrNull()
+            ?: importantRegex.find(text)?.groupValues?.get(1)?.toBooleanStrictOrNull()
+            ?: when {
+                text.startsWith("true", ignoreCase = true) -> true
+                text.startsWith("false", ignoreCase = true) -> false
+                else -> false
+            }
+        val reason = reasonRegex.find(text)?.groupValues?.get(1)?.ifBlank { null }
+            ?: if (condMatch) "Condition matched" else "Condition not matched"
+        val category = categoryRegex.find(text)?.groupValues?.get(1)?.ifBlank { "other" } ?: "other"
+
+        return SemanticConditionResult(
+            conditionMatched = condMatch,
+            reason = reason,
+            category = category
+        )
+    }
 }
+
+data class SemanticConditionResult(
+    val conditionMatched: Boolean,
+    val reason: String,
+    val category: String = "other"
+)

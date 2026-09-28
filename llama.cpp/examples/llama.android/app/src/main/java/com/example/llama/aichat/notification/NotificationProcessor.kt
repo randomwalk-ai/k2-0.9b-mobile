@@ -283,9 +283,9 @@ class NotificationProcessor(
                             candidateDeepRule.text.lowercase().startsWith("block") ||
                             candidateDeepRule.text.lowercase().startsWith("mute")
 
-                    // Build prompt with ONLY the deep candidate rule so K2 evaluates the condition cleanly without multi-rule conflicts
-                    val prompt = K2PromptBuilder.buildPrompt(
-                        rules = listOf(candidateDeepRule.text),
+                    // Build single condition evaluation prompt for K2
+                    val prompt = K2PromptBuilder.buildConditionPrompt(
+                        rule = candidateDeepRule.text,
                         appName = data.appName,
                         packageName = data.packageName,
                         title = data.title,
@@ -294,48 +294,32 @@ class NotificationProcessor(
                     )
                     val rawResponse = inferenceManager.analyze(prompt)
                     if (!rawResponse.isNullOrBlank()) {
-                        val analysis = K2ResponseParser.parse(rawResponse, defaultCleanSummary)
-                        val reasonLower = analysis.reason.lowercase()
+                        val conditionResult = K2ResponseParser.parseConditionResult(rawResponse)
 
                         if (isDeepSuppression) {
-                            // Check if K2 detected that the negative condition (anger, hostile tone, or rule condition) was met
-                            val toneMatched = reasonLower.contains("angry") ||
-                                    reasonLower.contains("furious") ||
-                                    reasonLower.contains("mad") ||
-                                    reasonLower.contains("hostile") ||
-                                    reasonLower.contains("conflict") ||
-                                    reasonLower.contains("rule") ||
-                                    !analysis.important
-
-                            if (toneMatched) {
+                            if (conditionResult.conditionMatched) {
                                 // The suppression rule triggered! Lock it to NOT IMPORTANT / NO ALERT.
                                 isImportant = false
                                 shouldAlert = false
-                                val cleanReason = if (analysis.reason.isNotBlank()) analysis.reason else "Suppression rule condition matched"
+                                val cleanReason = conditionResult.reason.ifBlank { "Suppression condition met" }
                                 decisionReason = "[🧠 K2 Deep AI] $cleanReason (Muted per rule)"
-                                if (analysis.category.isNotBlank() && analysis.category != "other") {
-                                    aiCategory = analysis.category
-                                }
-                                if (analysis.summary.isNotBlank()) {
-                                    finalSummary = analysis.summary
+                                if (conditionResult.category.isNotBlank() && conditionResult.category != "other") {
+                                    aiCategory = conditionResult.category
                                 }
                                 executedViaK2 = true
                             } else {
-                                // The suppression condition did NOT match (e.g. sender is NOT angry).
+                                // Suppression condition NOT matched (e.g. sender is NOT angry).
                                 // Do not mark executedViaK2 = true, so execution smoothly falls through to check remaining rules (e.g. Teams rule)!
-                                Log.d("NotificationProcessor", "Deep suppression condition not met (${analysis.reason}); falling through to remaining rules")
+                                Log.d("NotificationProcessor", "Deep suppression condition not met (${conditionResult.reason}); evaluating remaining rules")
                             }
                         } else {
                             // Deep positive rule (e.g. "urgent crisis is important")
-                            if (analysis.important) {
+                            if (conditionResult.conditionMatched) {
                                 isImportant = true
-                                shouldAlert = analysis.alert
-                                decisionReason = "[🧠 K2 Deep AI] ${analysis.reason}"
-                                if (analysis.category.isNotBlank() && analysis.category != "other") {
-                                    aiCategory = analysis.category
-                                }
-                                if (analysis.summary.isNotBlank()) {
-                                    finalSummary = analysis.summary
+                                shouldAlert = true
+                                decisionReason = "[🧠 K2 Deep AI] ${conditionResult.reason}"
+                                if (conditionResult.category.isNotBlank() && conditionResult.category != "other") {
+                                    aiCategory = conditionResult.category
                                 }
                                 executedViaK2 = true
                             }
