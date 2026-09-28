@@ -1,19 +1,43 @@
 package com.example.llama.aichat.ai
 
+import com.example.llama.aichat.data.JsonListHelper
+import com.example.llama.aichat.data.NotificationRule
+
 enum class RuleIntent {
-    SIMPLE_CONTACT,      // Pure contact name match (Fast-Path <1ms)
-    SIMPLE_BLOCK,        // Pure contact block (Fast-Path <1ms)
-    SEMANTIC_CONDITIONAL // Complex / Topic / Conditional rule (K2 Horizon 0.9B AI)
+    SIMPLE_CONTACT,      // Pure contact name match (e.g. "Madhu", "Arjun")
+    SIMPLE_BLOCK,        // Pure contact block (e.g. "Block Bob", "Ignore Spammer")
+    CONDITIONAL_CONTACT, // Person rule with topic/negation (e.g. "Arjun not movies", "Arjun only games")
+    TOPIC_FILTER,        // Domain / Topic rule (e.g. "Bank transactions and OTP", "Job interviews")
+    APP_FILTER           // App-specific rule (e.g. "Slack P0 alerts", "Uber cab arrival")
 }
 
 data class ParsedRule(
     val rawText: String,
     val intent: RuleIntent,
     val targetPerson: String? = null,
-    val dynamicAnchors: Set<String> = emptySet(),
-    val excludedAnchors: Set<String> = emptySet(),
+    val action: String = "ALERT", // "ALERT" or "MUTE"
+    val targetApps: Set<String> = emptySet(),
+    val positiveTopics: Set<String> = emptySet(),
+    val excludedTopics: Set<String> = emptySet(),
     val isNegative: Boolean = false
-)
+) {
+    fun toNotificationRule(id: Long = 0L, enabled: Boolean = true): NotificationRule {
+        return NotificationRule(
+            id = id,
+            text = rawText,
+            enabled = enabled,
+            targetPerson = targetPerson,
+            action = action,
+            positiveTopicsJson = JsonListHelper.toJson(positiveTopics),
+            excludedTopicsJson = JsonListHelper.toJson(excludedTopics),
+            targetAppsJson = JsonListHelper.toJson(targetApps),
+            ruleIntent = intent.name,
+            semanticDepth = "AOT_FAST",
+            createdAt = System.currentTimeMillis(),
+            updatedAt = System.currentTimeMillis()
+        )
+    }
+}
 
 object RuleClassifier {
 
@@ -25,25 +49,141 @@ object RuleClassifier {
         "please", "be", "never", "not", "dont", "do", "ignore", "block", "blocked",
         "calls", "call", "text", "texts", "about", "related", "relating", "regarding",
         "if", "only", "when", "then", "which", "that", "this", "there", "their",
-        "should", "would", "could", "must", "of", "an", "a", "or", "as"
+        "should", "would", "could", "must", "of", "an", "a", "or", "as", "me", "my",
+        "tell", "notify", "update", "updates", "get", "give", "send"
+    )
+
+    // Comprehensive Domain Semantic Knowledge Graph for Ahead-Of-Time (AOT) Synonym Expansion
+    private val DOMAIN_SYNONYMS = mapOf(
+        // Gaming & Sports
+        "game" to listOf("game", "games", "gaming", "gamer", "cricket", "football", "soccer", "bgmi", "pubg", "cod", "valorant", "fifa", "chess", "playstation", "xbox", "steam", "nintendo", "esports", "tournament", "match", "raid", "scrims", "discord"),
+        "games" to listOf("game", "games", "gaming", "gamer", "cricket", "football", "soccer", "bgmi", "pubg", "cod", "valorant", "fifa", "chess", "playstation", "xbox", "steam", "nintendo", "esports", "tournament", "match", "raid", "scrims", "discord"),
+        "gaming" to listOf("game", "games", "gaming", "gamer", "cricket", "football", "soccer", "bgmi", "pubg", "cod", "valorant", "fifa", "chess", "steam", "playstation", "xbox", "raid", "match"),
+        "cricket" to listOf("cricket", "ipl", "wicket", "batsman", "bowler", "pitch", "overs"),
+        "football" to listOf("football", "soccer", "fifa", "goal", "penalty", "premier league", "champions league"),
+
+        // Movies & Entertainment
+        "movie" to listOf("movie", "movies", "cinema", "film", "films", "trailer", "theatre", "theater", "showtime", "screen", "actor", "actress", "netflix", "hotstar", "prime video", "ott", "blockbuster", "series", "episode", "season", "box office", "cinemas", "teaser", "premiere"),
+        "movies" to listOf("movie", "movies", "cinema", "film", "films", "trailer", "theatre", "theater", "showtime", "screen", "actor", "actress", "netflix", "hotstar", "prime video", "ott", "blockbuster", "series", "episode", "season", "box office", "cinemas", "teaser", "premiere"),
+        "cinema" to listOf("movie", "movies", "cinema", "film", "films", "theatre", "theater", "showtime", "screen", "tickets"),
+        "film" to listOf("movie", "movies", "cinema", "film", "films", "trailer", "theatre", "theater", "ott", "netflix"),
+        "trailer" to listOf("trailer", "teaser", "preview", "promo"),
+
+        // Banking, Money, UPI & Finance
+        "bank" to listOf("bank", "banking", "otp", "debit", "debited", "credit", "credited", "refund", "refunded", "upi", "transfer", "transferred", "payment", "paid", "amount", "balance", "rs", "inr", "account", "acct", "atm", "withdrawal", "withdrawn", "salary", "txn", "transaction", "statement", "emi", "interest", "neft", "rtgs", "imps", "cred", "gpay", "phonepe", "paytm", "hdfc", "sbi", "icici", "axis", "kotak"),
+        "banking" to listOf("bank", "banking", "otp", "debit", "debited", "credit", "credited", "refund", "upi", "transfer", "payment", "paid", "balance", "rs", "inr", "account", "txn", "transaction"),
+        "transaction" to listOf("transaction", "txn", "debited", "credited", "transfer", "transferred", "payment", "paid", "amount", "rs", "inr", "account", "upi", "refund", "withdrawal", "spent", "received"),
+        "transactions" to listOf("transaction", "txn", "debited", "credited", "transfer", "transferred", "payment", "paid", "amount", "rs", "inr", "account", "upi", "refund", "withdrawal", "spent", "received"),
+        "money" to listOf("money", "amount", "rs", "inr", "rupees", "debited", "credited", "transfer", "transferred", "received", "sent", "paid", "payment", "balance", "refund"),
+        "otp" to listOf("otp", "verification code", "one time password", "security code", "secret code", "valid for", "do not share", "auth code", "login code"),
+        "salary" to listOf("salary", "credited", "payroll", "stipend", "wages", "bonus", "earnings"),
+        "refund" to listOf("refund", "refunded", "reversal", "credited back", "cashback credited", "returned to account"),
+
+        // Food Delivery & Quick Commerce
+        "food" to listOf("food", "swiggy", "zomato", "blinkit", "zepto", "instamart", "bigbasket", "delivery", "delivered", "delivering", "order", "ordered", "rider", "driver", "courier", "doorstep", "picked up", "reaching", "out for delivery", "dispatched", "track your order", "restaurant", "kitchen", "meal", "biryani", "pizza", "groceries"),
+        "delivery" to listOf("delivery", "delivered", "delivering", "order", "ordered", "out for delivery", "arriving", "arrived", "doorstep", "rider", "driver", "courier", "picked up", "reaching", "dispatched", "shipment", "package", "parcel"),
+        "order" to listOf("order", "orders", "ordered", "delivery", "delivered", "arriving", "out for delivery", "picked up", "rider", "dispatched", "tracking", "order confirmed"),
+        "orders" to listOf("order", "orders", "ordered", "delivery", "delivered", "arriving", "out for delivery", "picked up", "rider", "dispatched", "tracking", "order confirmed"),
+        "grocery" to listOf("grocery", "groceries", "blinkit", "zepto", "instamart", "bigbasket", "order", "delivery", "delivered", "doorstep"),
+
+        // E-Commerce & Couriers
+        "package" to listOf("package", "parcel", "shipment", "shipped", "out for delivery", "delivered", "courier", "delhivery", "bluedart", "amazon", "flipkart", "tracking", "arriving today"),
+        "parcel" to listOf("parcel", "package", "shipment", "shipped", "out for delivery", "delivered", "courier", "delhivery", "bluedart", "tracking"),
+        "courier" to listOf("courier", "parcel", "package", "shipment", "shipped", "out for delivery", "delivered", "tracking", "awb"),
+
+        // Jobs, Recruiting & Careers
+        "job" to listOf("job", "jobs", "interview", "interviews", "recruiter", "recruitment", "hiring", "hr", "offer", "offer letter", "shortlisted", "assessment", "resume", "cv", "application", "career", "vacancy", "referral", "technical round", "salary discussion", "onboarding", "interview call", "hired"),
+        "jobs" to listOf("job", "jobs", "interview", "interviews", "recruiter", "recruitment", "hiring", "hr", "offer", "offer letter", "shortlisted", "assessment", "resume", "cv", "application", "career", "vacancy", "referral"),
+        "interview" to listOf("interview", "interviews", "recruiter", "hiring", "hr", "offer", "shortlisted", "assessment", "technical round", "managerial round", "coding test", "interview call", "schedule interview"),
+        "interviews" to listOf("interview", "interviews", "recruiter", "hiring", "hr", "offer", "shortlisted", "assessment", "technical round", "interview call"),
+        "recruiter" to listOf("recruiter", "recruitment", "talent acquisition", "hr", "hiring", "job opportunity", "interview", "offer"),
+
+        // Travel, Rides, Flights, Trains
+        "cab" to listOf("cab", "cabs", "uber", "ola", "rapido", "ride", "driver", "arrived", "reaching", "otp", "pin", "pickup", "drop"),
+        "ride" to listOf("ride", "uber", "ola", "rapido", "driver", "arrived", "reaching", "otp", "pin", "pickup"),
+        "flight" to listOf("flight", "airline", "boarding", "gate", "delayed", "departure", "arrival", "indigo", "air india", "vistara", "akasa", "terminal", "boarding pass", "pnr"),
+        "train" to listOf("train", "irctc", "pnr", "coach", "berth", "seat", "platform", "departure", "chart prepared", "train status"),
+
+        // Work, Incidents, DevOps & Tech
+        "incident" to listOf("incident", "outage", "downtime", "p0", "p1", "p2", "sev-1", "sev-2", "server down", "crash", "alert", "pagerduty", "datadog", "sentry", "alertmanager", "production", "latency spike"),
+        "outage" to listOf("outage", "downtime", "incident", "p0", "p1", "server down", "production down", "crash"),
+        "downtime" to listOf("downtime", "outage", "incident", "server down", "production", "crash", "p0", "p1"),
+        "p0" to listOf("p0", "sev-1", "critical incident", "production down", "outage", "downtime"),
+        "p1" to listOf("p1", "sev-2", "high priority incident", "major outage"),
+        "pr" to listOf("pr", "pull request", "pr review", "code review", "github", "gitlab", "pipeline failed"),
+
+        // Bills & Utilities
+        "bill" to listOf("bill", "bills", "due date", "overdue", "electricity", "power", "bescom", "water bill", "gas cylinder", "challan", "fine", "penalty", "tax due"),
+        "bills" to listOf("bill", "bills", "due date", "overdue", "electricity", "water", "gas", "challan", "penalty", "tax"),
+        "electricity" to listOf("electricity", "power", "power cut", "bescom", "tneb", "tssspdcl", "bill", "due date", "disconnection"),
+        "challan" to listOf("challan", "traffic fine", "penalty", "fine", "mparivahan", "echallan", "violation"),
+
+        // Promotions, Marketing, Spam (For Filtering / Exclusions)
+        "promotions" to listOf("promotions", "promotional", "pre-approved", "scratch card", "deals", "advertisement", "newsletter", "save big", "special deal", "hurry up", "limited time offer", "discount", "discounts", "coupon", "cashback voucher", "claim offer", "viewed your profile", "appeared in searches", "congratulate"),
+        "promotional" to listOf("promotions", "promotional", "pre-approved", "scratch card", "deals", "advertisement", "newsletter", "save big", "discount", "discounts", "coupon", "cashback voucher", "claim offer"),
+        "offers" to listOf("offers", "offer", "discount", "discounts", "sale", "coupon", "cashback", "flat 50%", "deals", "scratch card", "pre-approved", "promo code"),
+        "offer" to listOf("offer", "offers", "discount", "discounts", "sale", "coupon", "cashback", "scratch card", "pre-approved", "promo code"),
+        "discount" to listOf("discount", "discounts", "flat 50%", "flat 60%", "flat 40%", "flat 70%", "coupon", "cashback", "promo code", "save up to"),
+        "discounts" to listOf("discount", "discounts", "flat 50%", "flat 60%", "flat 40%", "flat 70%", "coupon", "cashback", "promo code", "save up to"),
+        "sales" to listOf("sale", "clearance sale", "mega sale", "flash sale", "lightning deal", "discount", "coupon", "special offer"),
+        "sale" to listOf("sale", "clearance sale", "mega sale", "flash sale", "lightning deal", "discount", "coupon", "special offer"),
+        "marketing" to listOf("marketing", "promotional", "advertisement", "deals", "spam", "newsletter"),
+        "spam" to listOf("spam", "promotional", "viewed your profile", "appeared in searches", "daily quote", "blessings", "horoscope", "astrology", "reels you may like", "suggested for you", "congratulate")
+    )
+
+    private val KNOWN_APP_KEYWORDS = mapOf(
+        "whatsapp" to listOf("whatsapp", "com.whatsapp"),
+        "instagram" to listOf("instagram", "com.instagram.android"),
+        "telegram" to listOf("telegram", "org.telegram.messenger"),
+        "slack" to listOf("slack", "com.Slack"),
+        "teams" to listOf("teams", "microsoft teams", "com.microsoft.teams"),
+        "pagerduty" to listOf("pagerduty", "com.pagerduty.android"),
+        "linkedin" to listOf("linkedin", "com.linkedin.android"),
+        "gmail" to listOf("gmail", "google mail", "com.google.android.gm"),
+        "phonepe" to listOf("phonepe", "com.phonepe.app"),
+        "gpay" to listOf("gpay", "google pay", "com.google.android.apps.nbu.paisa.user"),
+        "paytm" to listOf("paytm", "net.one97.paytm"),
+        "cred" to listOf("cred", "com.dreamplug.androidapp"),
+        "swiggy" to listOf("swiggy", "in.swiggy.android"),
+        "zomato" to listOf("zomato", "com.application.zomato"),
+        "blinkit" to listOf("blinkit", "com.grofers.customerapp"),
+        "zepto" to listOf("zepto", "com.zepto.app"),
+        "amazon" to listOf("amazon", "in.amazon.mShop.android.shopping"),
+        "flipkart" to listOf("flipkart", "com.flipkart.android"),
+        "uber" to listOf("uber", "com.ubercab"),
+        "ola" to listOf("ola", "com.olacabs.customer"),
+        "irctc" to listOf("irctc", "cris.org.in.prs.ima")
     )
 
     fun classify(ruleText: String): ParsedRule {
         val lower = ruleText.lowercase().trim()
-        val isExplicitNegative = lower.contains("never") || lower.contains("not important") ||
-                lower.contains("never alert") || lower.contains("do not alert") ||
-                lower.contains("dont alert") || lower.contains("no alert") ||
-                lower.contains("ignore") || lower.contains("block")
 
+        val isExplicitNegative = lower.startsWith("block ") || lower.startsWith("ignore ") ||
+                lower.startsWith("mute ") || lower.contains("never alert") ||
+                lower.contains("do not alert") || lower.contains("dont alert") ||
+                lower.contains("no alert") || lower.contains("not important") ||
+                lower.contains("never important") ||
+                lower.contains("ignore all ") || lower.contains("mute all ")
+
+        val action = if (isExplicitNegative) "MUTE" else "ALERT"
+
+        // 1. Extract Target Apps
+        val targetApps = mutableSetOf<String>()
+        for ((appName, identifiers) in KNOWN_APP_KEYWORDS) {
+            if (lower.contains(appName)) {
+                targetApps.addAll(identifiers)
+            }
+        }
+
+        // 2. Extract Target Person
         val explicitTarget = extractTargetPerson(lower)
-
         val targetName = if (explicitTarget != null) {
             explicitTarget
         } else {
             // Check if user entered strictly a contact name (e.g. "Madhu", "Arjun_Vasireddy", "ignore Madhu", "block Bob")
-            val nonStopTokens = lower.split(Regex("[^a-zA-Z0-9_]+")).filter { it.length >= 2 && it !in FUNCTIONAL_STOP_WORDS }
+            val nonStopTokens = lower.split(Regex("[^a-zA-Z0-9_]+")).filter { it.length >= 2 && it !in FUNCTIONAL_STOP_WORDS && it !in KNOWN_APP_KEYWORDS.keys }
             val totalTokens = lower.split(Regex("[^a-zA-Z0-9_]+")).filter { it.length >= 2 }
-            if (nonStopTokens.size in 1..2 && totalTokens.size <= 3) {
+            if (nonStopTokens.size in 1..2 && totalTokens.size <= 3 && !hasGeneralTopicKeywords(nonStopTokens)) {
                 nonStopTokens.joinToString(" ")
             } else {
                 null
@@ -51,74 +191,85 @@ object RuleClassifier {
         }
 
         val isPersonRule = targetName != null
-        val excludedAnchors = extractExcludedAnchors(lower)
 
-        // Dynamically extract positive topic anchors from user's rule text (excluding target and exclusions)
+        // 3. Extract Raw Excluded Anchors (Exceptions / Negations)
+        val rawExcludedAnchors = extractExcludedAnchors(lower).toMutableSet()
+
+        // 4. Extract Positive Topic Anchors
         val allTokens = lower.split(Regex("[^a-zA-Z0-9_]+")).filter { it.length >= 3 }
         val targetTokens = targetName?.split(Regex("[^a-zA-Z0-9_]+"))?.toSet() ?: emptySet()
-        val topicAnchors = allTokens.filter { token ->
-            token !in FUNCTIONAL_STOP_WORDS && token !in targetTokens && token !in excludedAnchors
+        val appTokens = targetApps.flatMap { it.split(Regex("[^a-zA-Z0-9_]+")) }.toSet()
+
+        val rawPositiveAnchors = allTokens.filter { token ->
+            token !in FUNCTIONAL_STOP_WORDS &&
+            token !in targetTokens &&
+            token !in rawExcludedAnchors &&
+            token !in appTokens
         }.toSet()
 
-        val hasCondition = topicAnchors.isNotEmpty() || excludedAnchors.isNotEmpty()
+        // If rule is explicitly negative (e.g. "whatever from arjun related to movies, never important"),
+        // any topic anchor is an exclusion anchor!
+        if (isExplicitNegative && rawPositiveAnchors.isNotEmpty()) {
+            rawExcludedAnchors.addAll(rawPositiveAnchors)
+        }
 
-        return when {
-            // Case 1: Person rule with dynamic topic condition or exception (e.g. "Arjun not related to movies...") -> SEMANTIC
-            isPersonRule && hasCondition -> {
-                ParsedRule(
-                    rawText = ruleText,
-                    intent = RuleIntent.SEMANTIC_CONDITIONAL,
-                    targetPerson = targetName,
-                    dynamicAnchors = topicAnchors,
-                    excludedAnchors = excludedAnchors,
-                    isNegative = isExplicitNegative
-                )
-            }
-            // Case 2: General topic rule (e.g. "client invoices", "jobs", "server downtime") -> SEMANTIC
-            !isPersonRule && hasCondition -> {
-                ParsedRule(
-                    rawText = ruleText,
-                    intent = RuleIntent.SEMANTIC_CONDITIONAL,
-                    targetPerson = null,
-                    dynamicAnchors = topicAnchors,
-                    excludedAnchors = excludedAnchors,
-                    isNegative = isExplicitNegative
-                )
-            }
-            // Case 3: Pure negative block with no topic condition -> SIMPLE BLOCK
-            isPersonRule && isExplicitNegative && !targetName.isNullOrBlank() -> {
-                ParsedRule(
-                    rawText = ruleText,
-                    intent = RuleIntent.SIMPLE_BLOCK,
-                    targetPerson = targetName,
-                    dynamicAnchors = emptySet(),
-                    excludedAnchors = emptySet(),
-                    isNegative = true
-                )
-            }
-            // Case 4: Pure positive contact rule -> SIMPLE CONTACT
-            isPersonRule && !targetName.isNullOrBlank() -> {
-                ParsedRule(
-                    rawText = ruleText,
-                    intent = RuleIntent.SIMPLE_CONTACT,
-                    targetPerson = targetName,
-                    dynamicAnchors = emptySet(),
-                    excludedAnchors = emptySet(),
-                    isNegative = false
-                )
-            }
-            // Default -> SEMANTIC (handled by K2 LLM)
-            else -> {
-                ParsedRule(
-                    rawText = ruleText,
-                    intent = RuleIntent.SEMANTIC_CONDITIONAL,
-                    targetPerson = targetName,
-                    dynamicAnchors = topicAnchors,
-                    excludedAnchors = excludedAnchors,
-                    isNegative = isExplicitNegative
-                )
+        val expandedExcludedTopics = expandTopicSet(rawExcludedAnchors)
+        val finalPositiveAnchors = if (isExplicitNegative) emptySet() else rawPositiveAnchors
+        val expandedPositiveTopics = expandTopicSet(finalPositiveAnchors)
+
+        val hasCondition = expandedPositiveTopics.isNotEmpty() || expandedExcludedTopics.isNotEmpty()
+
+        val intent = when {
+            // Case 1: Pure block with no condition -> SIMPLE_BLOCK
+            isPersonRule && isExplicitNegative && !hasCondition -> RuleIntent.SIMPLE_BLOCK
+
+            // Case 2: Pure positive contact -> SIMPLE_CONTACT
+            isPersonRule && !isExplicitNegative && !hasCondition -> RuleIntent.SIMPLE_CONTACT
+
+            // Case 3: Person rule with condition/exceptions -> CONDITIONAL_CONTACT
+            isPersonRule && hasCondition -> RuleIntent.CONDITIONAL_CONTACT
+
+            // Case 4: App-specific rule with topics -> APP_FILTER
+            targetApps.isNotEmpty() && !isPersonRule -> RuleIntent.APP_FILTER
+
+            // Case 5: General topic rule -> TOPIC_FILTER
+            else -> RuleIntent.TOPIC_FILTER
+        }
+
+        return ParsedRule(
+            rawText = ruleText,
+            intent = intent,
+            targetPerson = targetName,
+            action = action,
+            targetApps = targetApps,
+            positiveTopics = expandedPositiveTopics,
+            excludedTopics = expandedExcludedTopics,
+            isNegative = isExplicitNegative
+        )
+    }
+
+    private fun hasGeneralTopicKeywords(tokens: List<String>): Boolean {
+        val topicRoots = setOf(
+            "bank", "otp", "debit", "credit", "money", "food", "order", "delivery",
+            "job", "interview", "ride", "cab", "flight", "train", "bill", "p0", "pr",
+            "game", "games", "movie", "movies", "slack", "teams", "swiggy", "uber"
+        )
+        return tokens.any { it in topicRoots }
+    }
+
+    private fun expandTopicSet(rawTopics: Set<String>): Set<String> {
+        val expanded = mutableSetOf<String>()
+        for (topic in rawTopics) {
+            val clean = topic.lowercase().trim()
+            expanded.add(clean)
+            val synonyms = DOMAIN_SYNONYMS[clean]
+                ?: DOMAIN_SYNONYMS[clean.removeSuffix("s")]
+                ?: DOMAIN_SYNONYMS[clean + "s"]
+            if (synonyms != null) {
+                expanded.addAll(synonyms)
             }
         }
+        return expanded
     }
 
     private fun extractTargetPerson(lowerText: String): String? {
@@ -130,28 +281,66 @@ object RuleClassifier {
             lowerText.contains("by ") -> lowerText.substringAfter("by ")
             lowerText.contains("calls from ") -> lowerText.substringAfter("calls from ")
             lowerText.contains("call from ") -> lowerText.substringAfter("call from ")
+            lowerText.contains("if ") && lowerText.contains(" msg") -> {
+                val candidate = lowerText.substringAfter("if ").substringBefore(" msg").trim()
+                if (candidate.length in 2..25 && candidate !in FUNCTIONAL_STOP_WORDS) candidate else null
+            }
+            lowerText.contains("if ") && lowerText.contains(" sends") -> {
+                val candidate = lowerText.substringAfter("if ").substringBefore(" sends").trim()
+                if (candidate.length in 2..25 && candidate !in FUNCTIONAL_STOP_WORDS) candidate else null
+            }
+            lowerText.contains("if ") && lowerText.contains(" messages") -> {
+                val candidate = lowerText.substringAfter("if ").substringBefore(" messages").trim()
+                if (candidate.length in 2..25 && candidate !in FUNCTIONAL_STOP_WORDS) candidate else null
+            }
             else -> null
         } ?: return null
 
-        val tokens = afterFrom.split(Regex("[^a-zA-Z0-9_]+")).filter { it.length >= 2 && it !in FUNCTIONAL_STOP_WORDS }
-        return tokens.firstOrNull()
+        val tokens = afterFrom.split(Regex("[^a-zA-Z0-9_]+")).filter { it.length >= 2 && it !in FUNCTIONAL_STOP_WORDS && it !in KNOWN_APP_KEYWORDS.keys }
+        val candidate = tokens.firstOrNull()
+        return if (candidate != null && !hasGeneralTopicKeywords(listOf(candidate))) candidate else null
     }
 
     private fun extractExcludedAnchors(lowerText: String): Set<String> {
-        val pattern = when {
-            lowerText.contains("not related to ") -> lowerText.substringAfter("not related to ")
-            lowerText.contains("not about ") -> lowerText.substringAfter("not about ")
-            lowerText.contains("except about ") -> lowerText.substringAfter("except about ")
-            lowerText.contains("except ") -> lowerText.substringAfter("except ")
-            lowerText.contains("excluding ") -> lowerText.substringAfter("excluding ")
-            lowerText.contains("unless about ") -> lowerText.substringAfter("unless about ")
-            lowerText.contains("unless ") -> lowerText.substringAfter("unless ")
-            lowerText.contains("other than ") -> lowerText.substringAfter("other than ")
-            else -> return emptySet()
+        // If it's a simple block like "ignore Bob" or "block Arjun", do not treat the person as an excluded topic anchor
+        if (lowerText.startsWith("ignore ") || lowerText.startsWith("block ") || lowerText.startsWith("mute ")) {
+            val nonStopTokens = lowerText.split(Regex("[^a-zA-Z0-9_]+")).filter { it.length >= 2 && it !in FUNCTIONAL_STOP_WORDS }
+            if (nonStopTokens.size <= 2 && !hasGeneralTopicKeywords(nonStopTokens)) {
+                return emptySet()
+            }
         }
 
-        val cleanClause = pattern.substringBefore(",").substringBefore(".").substringBefore(" is ").trim()
-        val tokens = cleanClause.split(Regex("[^a-zA-Z0-9_]+")).filter { it.length >= 3 && it !in FUNCTIONAL_STOP_WORDS }
-        return tokens.toSet()
+        val patterns = listOf(
+            "not related to ", "not about ", "except about ", "except for ", "except ",
+            "excluding ", "unless about ", "unless it is ", "unless ", "other than ",
+            "ignore ", "mute ", "filter out ", "without "
+        )
+
+        val result = mutableSetOf<String>()
+
+        for (p in patterns) {
+            if (lowerText.contains(p)) {
+                val after = lowerText.substringAfter(p)
+                val cleanClause = after.substringBefore(",").substringBefore(".").substringBefore(" is ").substringBefore(" but ").trim()
+
+                // Preserve compound phrases
+                if (cleanClause.contains("credit card")) {
+                    result.add("credit card")
+                    result.add("card offer")
+                }
+                if (cleanClause.contains("pre-approved") || cleanClause.contains("pre approved")) {
+                    result.add("pre-approved")
+                }
+
+                val tokens = cleanClause.split(Regex("[^a-zA-Z0-9_]+")).filter { 
+                    it.length >= 3 && it !in FUNCTIONAL_STOP_WORDS && it != "credit" && it != "card"
+                }
+                result.addAll(tokens)
+                if (result.isNotEmpty()) {
+                    return result
+                }
+            }
+        }
+        return emptySet()
     }
 }

@@ -6,6 +6,7 @@ import androidx.core.app.NotificationManagerCompat
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.llama.aichat.ai.K2InferenceManager
+import com.example.llama.aichat.ai.RuleClassifier
 import com.example.llama.aichat.data.*
 import com.example.llama.aichat.notification.NotificationSummaryManager
 import kotlinx.coroutines.Dispatchers
@@ -162,13 +163,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun addRule(text: String) {
         viewModelScope.launch {
-            ruleRepo.insert(NotificationRule(text = text.trim()))
+            val parsed = RuleClassifier.classify(text)
+            val compiled = parsed.toNotificationRule()
+            ruleRepo.insert(compiled)
         }
     }
 
     fun updateRule(rule: NotificationRule, newText: String) {
         viewModelScope.launch {
-            ruleRepo.update(rule.copy(text = newText.trim(), updatedAt = System.currentTimeMillis()))
+            val parsed = RuleClassifier.classify(newText)
+            val updated = parsed.toNotificationRule(id = rule.id, enabled = rule.enabled)
+            ruleRepo.update(updated)
         }
     }
 

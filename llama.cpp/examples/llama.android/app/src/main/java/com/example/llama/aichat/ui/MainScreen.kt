@@ -491,22 +491,28 @@ fun RulesSection(
                                 shape = RoundedCornerShape(4.dp),
                                 color = when (parsed.intent) {
                                     RuleIntent.SIMPLE_CONTACT -> Color(0xFF1B5E20).copy(alpha = 0.15f)
-                                    RuleIntent.SIMPLE_BLOCK -> Color(0xFFE65100).copy(alpha = 0.15f)
-                                    RuleIntent.SEMANTIC_CONDITIONAL -> Color(0xFF4A148C).copy(alpha = 0.15f)
+                                    RuleIntent.SIMPLE_BLOCK -> Color(0xFFB71C1C).copy(alpha = 0.15f)
+                                    RuleIntent.CONDITIONAL_CONTACT -> Color(0xFF0D47A1).copy(alpha = 0.15f)
+                                    RuleIntent.TOPIC_FILTER -> Color(0xFF4A148C).copy(alpha = 0.15f)
+                                    RuleIntent.APP_FILTER -> Color(0xFFE65100).copy(alpha = 0.15f)
                                 }
                             ) {
                                 Text(
                                     text = when (parsed.intent) {
-                                        RuleIntent.SIMPLE_CONTACT -> "⚡ Direct Contact (<1ms)"
-                                        RuleIntent.SIMPLE_BLOCK -> "⚡ Direct Block (<1ms)"
-                                        RuleIntent.SEMANTIC_CONDITIONAL -> "🧠 K2 Horizon AI Semantic"
+                                        RuleIntent.SIMPLE_CONTACT -> "⚡ Fast Contact (<0.2ms)"
+                                        RuleIntent.SIMPLE_BLOCK -> "🚫 Direct Block (<0.2ms)"
+                                        RuleIntent.CONDITIONAL_CONTACT -> "⚡ AOT Conditional (<0.2ms)"
+                                        RuleIntent.TOPIC_FILTER -> "⚡ AOT Topic Filter (<0.2ms)"
+                                        RuleIntent.APP_FILTER -> "⚡ App Filter (<0.2ms)"
                                     },
                                     fontSize = 10.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = when (parsed.intent) {
                                         RuleIntent.SIMPLE_CONTACT -> Color(0xFF2E7D32)
-                                        RuleIntent.SIMPLE_BLOCK -> Color(0xFFEF6C00)
-                                        RuleIntent.SEMANTIC_CONDITIONAL -> Color(0xFF7B1FA2)
+                                        RuleIntent.SIMPLE_BLOCK -> Color(0xFFD32F2F)
+                                        RuleIntent.CONDITIONAL_CONTACT -> Color(0xFF1976D2)
+                                        RuleIntent.TOPIC_FILTER -> Color(0xFF7B1FA2)
+                                        RuleIntent.APP_FILTER -> Color(0xFFEF6C00)
                                     },
                                     modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                                 )

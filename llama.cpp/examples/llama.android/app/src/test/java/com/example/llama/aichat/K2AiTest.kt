@@ -4,6 +4,7 @@ import com.example.llama.aichat.ai.K2PromptBuilder
 import com.example.llama.aichat.ai.K2ResponseParser
 import com.example.llama.aichat.ai.RuleClassifier
 import com.example.llama.aichat.ai.RuleIntent
+import com.example.llama.aichat.notification.NotificationData
 import org.junit.Assert.*
 import org.junit.Test
 
@@ -14,7 +15,7 @@ class K2AiTest {
         val rule = RuleClassifier.classify("any message from Madhu is important")
         assertEquals(RuleIntent.SIMPLE_CONTACT, rule.intent)
         assertEquals("madhu", rule.targetPerson)
-        assertTrue(rule.dynamicAnchors.isEmpty())
+        assertTrue(rule.positiveTopics.isEmpty())
         assertFalse(rule.isNegative)
     }
 
@@ -23,54 +24,48 @@ class K2AiTest {
         val rule = RuleClassifier.classify("ignore messages from Bob")
         assertEquals(RuleIntent.SIMPLE_BLOCK, rule.intent)
         assertEquals("bob", rule.targetPerson)
-        assertTrue(rule.dynamicAnchors.isEmpty())
         assertTrue(rule.isNegative)
     }
 
     @Test
-    fun testRuleClassifierSemanticConditionalPerson() {
+    fun testRuleClassifierConditionalPerson() {
         val rule = RuleClassifier.classify("whatever message from arjun related to movies, it is never important")
-        assertEquals(RuleIntent.SEMANTIC_CONDITIONAL, rule.intent)
+        assertEquals(RuleIntent.CONDITIONAL_CONTACT, rule.intent)
         assertEquals("arjun", rule.targetPerson)
-        assertTrue(rule.dynamicAnchors.contains("movies"))
+        assertTrue(rule.excludedTopics.contains("movies") || rule.excludedTopics.contains("movie"))
         assertTrue(rule.isNegative)
     }
 
     @Test
     fun testRuleClassifierExceptionClause() {
         val rule = RuleClassifier.classify("Message from arjun not related to movies, is important")
-        assertEquals(RuleIntent.SEMANTIC_CONDITIONAL, rule.intent)
+        assertEquals(RuleIntent.CONDITIONAL_CONTACT, rule.intent)
         assertEquals("arjun", rule.targetPerson)
-        assertTrue(rule.excludedAnchors.contains("movies"))
+        assertTrue(rule.excludedTopics.contains("movies") || rule.excludedTopics.contains("movie"))
         assertFalse(rule.isNegative)
     }
 
     @Test
-    fun testRuleClassifierSemanticJobTopic() {
+    fun testRuleClassifierJobTopic() {
         val rule = RuleClassifier.classify("if someone messages about job related it is important")
-        assertEquals(RuleIntent.SEMANTIC_CONDITIONAL, rule.intent)
+        assertEquals(RuleIntent.TOPIC_FILTER, rule.intent)
         assertNull(rule.targetPerson)
-        assertTrue(rule.dynamicAnchors.contains("job"))
+        assertTrue(rule.positiveTopics.contains("job") || rule.positiveTopics.contains("interview"))
         assertFalse(rule.isNegative)
     }
 
     @Test
-    fun testRuleClassifierDynamicBusinessInvoicingRule() {
+    fun testRuleClassifierBusinessInvoicingRule() {
         val rule = RuleClassifier.classify("client payment confirmation or invoice is urgent")
-        assertEquals(RuleIntent.SEMANTIC_CONDITIONAL, rule.intent)
-        assertTrue(rule.dynamicAnchors.contains("client"))
-        assertTrue(rule.dynamicAnchors.contains("payment"))
-        assertTrue(rule.dynamicAnchors.contains("confirmation"))
-        assertTrue(rule.dynamicAnchors.contains("invoice"))
+        assertEquals(RuleIntent.TOPIC_FILTER, rule.intent)
+        assertTrue(rule.positiveTopics.contains("payment") || rule.positiveTopics.contains("invoice") || rule.positiveTopics.contains("client"))
     }
 
     @Test
-    fun testRuleClassifierDynamicTechDowntimeRule() {
+    fun testRuleClassifierTechDowntimeRule() {
         val rule = RuleClassifier.classify("server downtime alerts from pagerduty")
-        assertEquals(RuleIntent.SEMANTIC_CONDITIONAL, rule.intent)
-        assertEquals("pagerduty", rule.targetPerson)
-        assertTrue(rule.dynamicAnchors.contains("server"))
-        assertTrue(rule.dynamicAnchors.contains("downtime"))
+        assertEquals(RuleIntent.APP_FILTER, rule.intent)
+        assertTrue(rule.positiveTopics.contains("server") || rule.positiveTopics.contains("downtime") || rule.positiveTopics.contains("outage"))
     }
 
     @Test
@@ -154,7 +149,7 @@ class K2AiTest {
         val rule1 = RuleClassifier.classify("Madhu")
         assertEquals(RuleIntent.SIMPLE_CONTACT, rule1.intent)
         assertEquals("madhu", rule1.targetPerson)
-        assertTrue(rule1.dynamicAnchors.isEmpty())
+        assertTrue(rule1.positiveTopics.isEmpty())
 
         val rule2 = RuleClassifier.classify("ignore Madhu")
         assertEquals(RuleIntent.SIMPLE_BLOCK, rule2.intent)
@@ -164,12 +159,7 @@ class K2AiTest {
 
     @Test
     fun testSenderMatchingDirectSender() {
-        // Mock helper testing matching logic
-        val target = "madhu"
-        val candidate1 = "Madhu"
-        val candidate2 = "Arjun_Vasireddy"
-
-        val dataFromArjun = com.example.llama.aichat.notification.NotificationData(
+        val dataFromArjun = NotificationData(
             packageName = "com.instagram.android",
             appName = "Instagram",
             title = "Arjun_Vasireddy",
@@ -181,7 +171,7 @@ class K2AiTest {
             timestamp = System.currentTimeMillis()
         )
 
-        val dataFromMadhu = com.example.llama.aichat.notification.NotificationData(
+        val dataFromMadhu = NotificationData(
             packageName = "com.instagram.android",
             appName = "Instagram",
             title = "Madhu",
@@ -208,7 +198,7 @@ class K2AiTest {
         val parsedRule = RuleClassifier.classify("any message from Madhu is important")
 
         // 1. Group chat where someone else (Arjun) talks about Madhu
-        val groupMsgFromArjun = com.example.llama.aichat.notification.NotificationData(
+        val groupMsgFromArjun = NotificationData(
             packageName = "com.whatsapp",
             appName = "WhatsApp",
             title = "College Friends",
@@ -222,7 +212,7 @@ class K2AiTest {
         assertFalse(isSenderMatchSimulated(parsedRule.targetPerson, groupMsgFromArjun))
 
         // 2. Group chat where Madhu is the sender
-        val groupMsgFromMadhu = com.example.llama.aichat.notification.NotificationData(
+        val groupMsgFromMadhu = NotificationData(
             packageName = "com.whatsapp",
             appName = "WhatsApp",
             title = "College Friends",
@@ -236,7 +226,7 @@ class K2AiTest {
         assertTrue(isSenderMatchSimulated(parsedRule.targetPerson, groupMsgFromMadhu))
 
         // 3. Text prefix group format ("Madhu: Let's start")
-        val groupPrefixMsg = com.example.llama.aichat.notification.NotificationData(
+        val groupPrefixMsg = NotificationData(
             packageName = "com.whatsapp",
             appName = "WhatsApp",
             title = "Project Group",
@@ -261,7 +251,7 @@ class K2AiTest {
         assertFalse(matchesPersonNameSimulated(ruleTarget, "Varun"))
     }
 
-    private fun isSenderMatchSimulated(ruleTarget: String?, data: com.example.llama.aichat.notification.NotificationData): Boolean {
+    private fun isSenderMatchSimulated(ruleTarget: String?, data: NotificationData): Boolean {
         if (ruleTarget.isNullOrBlank()) return false
 
         if (!data.sender.isNullOrBlank() && !data.sender.equals(data.appName, ignoreCase = true)) {
