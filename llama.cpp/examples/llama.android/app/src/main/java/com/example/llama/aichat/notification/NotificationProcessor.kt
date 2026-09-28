@@ -302,8 +302,27 @@ class NotificationProcessor(
                     val rawResponse = inferenceManager.analyze(prompt)
                     if (!rawResponse.isNullOrBlank()) {
                         val analysis = K2ResponseParser.parse(rawResponse, defaultCleanSummary)
-                        isImportant = analysis.important
-                        shouldAlert = analysis.alert
+                        var evaluatedImportant = analysis.important
+                        var evaluatedAlert = analysis.alert
+
+                        // Guardrail: If all relevant rules for this sender/app are MUTE / suppression rules
+                        // (e.g. "when angry is not important"), matching them means it MUST NOT alert / be important!
+                        val isRelevantRuleMuteOnly = relevantRules.isNotEmpty() && relevantRules.all {
+                            it.action == "MUTE" ||
+                            it.text.lowercase().contains("not important") ||
+                            it.text.lowercase().contains("never important") ||
+                            it.text.lowercase().contains("no alert") ||
+                            it.text.lowercase().startsWith("ignore") ||
+                            it.text.lowercase().startsWith("block") ||
+                            it.text.lowercase().startsWith("mute")
+                        }
+                        if (isRelevantRuleMuteOnly) {
+                            evaluatedImportant = false
+                            evaluatedAlert = false
+                        }
+
+                        isImportant = evaluatedImportant
+                        shouldAlert = evaluatedAlert
                         decisionReason = "[🧠 K2 Deep AI] ${analysis.reason}"
                         if (analysis.category.isNotBlank() && analysis.category != "other") {
                             aiCategory = analysis.category
