@@ -275,24 +275,17 @@ class NotificationProcessor(
                 var executedViaK2 = false
 
                 if (candidateDeepRule != null) {
-                    val relevantRules = enabledRules.filter { rule ->
-                        val targetPerson = rule.targetPerson
-                        val targetApps = rule.getTargetApps()
-                        val isPersonRule = !targetPerson.isNullOrBlank()
-                        val isAppRule = targetApps.isNotEmpty()
+                    val isDeepSuppression = candidateDeepRule.action == "MUTE" ||
+                            candidateDeepRule.text.lowercase().contains("not important") ||
+                            candidateDeepRule.text.lowercase().contains("never important") ||
+                            candidateDeepRule.text.lowercase().contains("no alert") ||
+                            candidateDeepRule.text.lowercase().startsWith("ignore") ||
+                            candidateDeepRule.text.lowercase().startsWith("block") ||
+                            candidateDeepRule.text.lowercase().startsWith("mute")
 
-                        val senderMatches = isPersonRule && isSenderMatch(targetPerson, data)
-                        val appMatch = if (isAppRule) {
-                            targetApps.any { targetApp ->
-                                packageLower.contains(targetApp.lowercase()) || appLower.contains(targetApp.lowercase())
-                            }
-                        } else false
-
-                        (isPersonRule && senderMatches) || (isAppRule && appMatch) || (!isPersonRule && !isAppRule)
-                    }
-
+                    // Build prompt with ONLY the deep candidate rule so K2 evaluates the condition cleanly without multi-rule conflicts
                     val prompt = K2PromptBuilder.buildPrompt(
-                        rules = relevantRules.map { it.text },
+                        rules = listOf(candidateDeepRule.text),
                         appName = data.appName,
                         packageName = data.packageName,
                         title = data.title,
@@ -302,35 +295,51 @@ class NotificationProcessor(
                     val rawResponse = inferenceManager.analyze(prompt)
                     if (!rawResponse.isNullOrBlank()) {
                         val analysis = K2ResponseParser.parse(rawResponse, defaultCleanSummary)
-                        var evaluatedImportant = analysis.important
-                        var evaluatedAlert = analysis.alert
+                        val reasonLower = analysis.reason.lowercase()
 
-                        // Guardrail: If all relevant rules for this sender/app are MUTE / suppression rules
-                        // (e.g. "when angry is not important"), matching them means it MUST NOT alert / be important!
-                        val isRelevantRuleMuteOnly = relevantRules.isNotEmpty() && relevantRules.all {
-                            it.action == "MUTE" ||
-                            it.text.lowercase().contains("not important") ||
-                            it.text.lowercase().contains("never important") ||
-                            it.text.lowercase().contains("no alert") ||
-                            it.text.lowercase().startsWith("ignore") ||
-                            it.text.lowercase().startsWith("block") ||
-                            it.text.lowercase().startsWith("mute")
-                        }
-                        if (isRelevantRuleMuteOnly) {
-                            evaluatedImportant = false
-                            evaluatedAlert = false
-                        }
+                        if (isDeepSuppression) {
+                            // Check if K2 detected that the negative condition (anger, hostile tone, or rule condition) was met
+                            val toneMatched = reasonLower.contains("angry") ||
+                                    reasonLower.contains("furious") ||
+                                    reasonLower.contains("mad") ||
+                                    reasonLower.contains("hostile") ||
+                                    reasonLower.contains("conflict") ||
+                                    reasonLower.contains("rule") ||
+                                    !analysis.important
 
-                        isImportant = evaluatedImportant
-                        shouldAlert = evaluatedAlert
-                        decisionReason = "[🧠 K2 Deep AI] ${analysis.reason}"
-                        if (analysis.category.isNotBlank() && analysis.category != "other") {
-                            aiCategory = analysis.category
+                            if (toneMatched) {
+                                // The suppression rule triggered! Lock it to NOT IMPORTANT / NO ALERT.
+                                isImportant = false
+                                shouldAlert = false
+                                val cleanReason = if (analysis.reason.isNotBlank()) analysis.reason else "Suppression rule condition matched"
+                                decisionReason = "[🧠 K2 Deep AI] $cleanReason (Muted per rule)"
+                                if (analysis.category.isNotBlank() && analysis.category != "other") {
+                                    aiCategory = analysis.category
+                                }
+                                if (analysis.summary.isNotBlank()) {
+                                    finalSummary = analysis.summary
+                                }
+                                executedViaK2 = true
+                            } else {
+                                // The suppression condition did NOT match (e.g. sender is NOT angry).
+                                // Do not mark executedViaK2 = true, so execution smoothly falls through to check remaining rules (e.g. Teams rule)!
+                                Log.d("NotificationProcessor", "Deep suppression condition not met (${analysis.reason}); falling through to remaining rules")
+                            }
+                        } else {
+                            // Deep positive rule (e.g. "urgent crisis is important")
+                            if (analysis.important) {
+                                isImportant = true
+                                shouldAlert = analysis.alert
+                                decisionReason = "[🧠 K2 Deep AI] ${analysis.reason}"
+                                if (analysis.category.isNotBlank() && analysis.category != "other") {
+                                    aiCategory = analysis.category
+                                }
+                                if (analysis.summary.isNotBlank()) {
+                                    finalSummary = analysis.summary
+                                }
+                                executedViaK2 = true
+                            }
                         }
-                        if (analysis.summary.isNotBlank()) {
-                            finalSummary = analysis.summary
-                        }
-                        executedViaK2 = true
                     } else {
                         Log.w("NotificationProcessor", "K2 inference returned null/unavailable; falling back to AOT evaluation")
                     }
@@ -344,6 +353,9 @@ class NotificationProcessor(
                     var matchedRuleText = ""
 
                     for (rule in enabledRules) {
+                        if (candidateDeepRule != null && rule.id == candidateDeepRule.id) {
+                            continue
+                        }
                     val targetPerson = rule.targetPerson
                     val action = rule.action
                     val positiveTopics = rule.getPositiveTopics()

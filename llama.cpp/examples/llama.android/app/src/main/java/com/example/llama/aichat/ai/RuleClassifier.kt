@@ -206,11 +206,11 @@ object RuleClassifier {
         val isExplicitNegative = lower.startsWith("block ") || lower.startsWith("ignore ") ||
             lower.startsWith("mute ") || lower.startsWith("never alert") ||
             lower.startsWith("do not alert") || lower.startsWith("dont alert") ||
-            lower.startsWith("no alert") || lower.contains("not important") ||
-            lower.contains("never important") || lower.startsWith("ignore all ") ||
+            lower.startsWith("no alert") || lower.endsWith("not important") ||
+            lower.endsWith("never important") || lower.startsWith("ignore all ") ||
             lower.startsWith("mute all ")
 
-        val isPureNegative = isExplicitNegative && !hasPositiveClause
+        val isPureNegative = !hasPositiveClause && !isDeepReasoningRequired && isExplicitNegative
 
         val action = if (isPureNegative) "MUTE" else "ALERT"
 
