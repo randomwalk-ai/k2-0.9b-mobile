@@ -43,8 +43,9 @@ object K2PromptBuilder {
                "{"
     }
 
-    fun buildConditionPrompt(
-        rule: String,
+    fun buildTonePrompt(
+        ruleText: String,
+        targetTones: List<String>,
         appName: String,
         packageName: String,
         title: String?,
@@ -54,24 +55,23 @@ object K2PromptBuilder {
         val safeApp = appName.ifBlank { "App" }
         val safeSender = if (!sender.isNullOrBlank() && sender != safeApp) sender else (title?.ifBlank { "N/A" } ?: "N/A")
         val safeText = text?.ifBlank { title ?: "" } ?: ""
+        val toneDescription = if (targetTones.isNotEmpty()) targetTones.joinToString(", ") else "emotion / tone condition in the rule"
 
         return "<|im_start|>system\n" +
-               "You are an on-device personal notification assistant. Evaluate whether the incoming notification meets the specific condition described in the user rule.\n\n" +
-               "Target Rule:\n" +
-               "${rule.trim()}\n\n" +
-               "Evaluation Guidelines:\n" +
-               "1. Determine objectively if the notification content, tone, or context satisfies the specific condition described in the rule.\n" +
-               "2. For emotional or subjective conditions, distinguish genuine hostility, conflict, or stated emotion from calm discussion, positive remarks, and friendly banter.\n" +
-               "3. Set \"condition_matched\": true if the condition is satisfied; otherwise set \"condition_matched\": false.\n\n" +
-               "Output ONLY a single JSON object in the exact format:\n" +
-               "{\"condition_matched\": true/false, \"reason\": \"brief explanation\", \"category\": \"messages/work/banking/delivery/other\"}\n" +
+               "You are an on-device emotion and tone analyzer. Determine if the incoming message genuinely exhibits the specific emotional tone ($toneDescription).\n\n" +
+               "Rule Context: ${ruleText.trim()}\n" +
+               "Target Emotional Tone: $toneDescription\n\n" +
+               "Guidelines:\n" +
+               "1. Set \"tone_matched\": true ONLY if the sender is genuinely expressing $toneDescription (e.g. true hostility, conflict, or stated emotion).\n" +
+               "2. Set \"tone_matched\": false if the sender is calm, positive, neutral, discussing normal work/tasks, or engaging in friendly casual banter.\n" +
+               "3. Distinguish actual emotional hostility from harmless remarks and friendly hyperbole.\n\n" +
+               "Output ONLY JSON in the exact format:\n" +
+               "{\"tone_matched\": true/false, \"reason\": \"brief explanation\"}\n" +
                "<|im_end|>\n" +
                "<|im_start|>user\n" +
-               "Incoming Notification:\n" +
-               "- App: $safeApp ($packageName)\n" +
-               "- Sender: $safeSender\n" +
-               "- Message: $safeText\n\n" +
-               "Evaluate condition in JSON:\n" +
+               "Sender: $safeSender ($safeApp)\n" +
+               "Message: $safeText\n\n" +
+               "Analyze tone in JSON:\n" +
                "<|im_end|>\n" +
                "<|im_start|>assistant\n" +
                "{"

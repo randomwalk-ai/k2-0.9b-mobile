@@ -180,21 +180,27 @@ object RuleClassifier {
         "spotify" to listOf("spotify", "com.spotify.music")
     )
 
-    private val EMOTION_AND_TONE_KEYWORDS = setOf(
+    val EMOTION_AND_TONE_KEYWORDS = setOf(
         "angry", "furious", "mad", "frustrated", "annoyed", "sarcastic", "sarcasm", "joke", "jokes",
         "funny", "humor", "serious", "sad", "crying", "depressed", "happy", "excited", "rude",
         "aggressive", "urgent tone", "urgency", "emergency", "crisis", "bad news", "good news",
         "scam", "suspicious", "phishing", "fight", "quarrel", "abusive", "abuse", "mood", "feeling"
     )
 
+    fun getEmotionTriggers(ruleText: String): List<String> {
+        val lower = ruleText.lowercase()
+        val ruleTokens = lower.split(Regex("[^a-zA-Z0-9_]+")).filter { it.isNotBlank() }.toSet()
+        return EMOTION_AND_TONE_KEYWORDS.filter { trigger ->
+            if (trigger.contains(" ")) lower.contains(trigger) else ruleTokens.contains(trigger)
+        }
+    }
+
     fun classify(ruleText: String): ParsedRule {
         val lower = ruleText.lowercase().trim()
         val ruleTokens = lower.split(Regex("[^a-zA-Z0-9_]+")).filter { it.isNotBlank() }.toSet()
 
         // Detect if rule requires on-device LLM deep reasoning for emotion/tone/subjectivity (word boundary match)
-        val isDeepReasoningRequired = EMOTION_AND_TONE_KEYWORDS.any { trigger ->
-            if (trigger.contains(" ")) lower.contains(trigger) else ruleTokens.contains(trigger)
-        }
+        val isDeepReasoningRequired = getEmotionTriggers(lower).isNotEmpty()
         val semanticDepth = if (isDeepReasoningRequired) "K2_DEEP" else "AOT_FAST"
 
         // Detect if rule has positive intent (e.g. "from madhu is important", "alert for arjun")

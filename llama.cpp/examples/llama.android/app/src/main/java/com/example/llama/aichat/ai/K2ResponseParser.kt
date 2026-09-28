@@ -64,6 +64,36 @@ object K2ResponseParser {
         category = "other"
     )
 
+    fun parseToneResult(rawResponse: String?): ToneAnalysisResult {
+        if (rawResponse.isNullOrBlank()) {
+            return ToneAnalysisResult(toneMatched = false, reason = "Model unavailable")
+        }
+        val text = rawResponse.trim()
+        val toneRegex = Regex("\"tone_matched\"\\s*:\\s*(true|false)", RegexOption.IGNORE_CASE)
+        val condRegex = Regex("\"condition_matched\"\\s*:\\s*(true|false)", RegexOption.IGNORE_CASE)
+        val isAngryRegex = Regex("\"is_angry\"\\s*:\\s*(true|false)", RegexOption.IGNORE_CASE)
+        val matchedRegex = Regex("\"matched\"\\s*:\\s*(true|false)", RegexOption.IGNORE_CASE)
+        val reasonRegex = Regex("\"reason\"\\s*:\\s*\"([^\"]*)\"", RegexOption.IGNORE_CASE)
+
+        val matched = toneRegex.find(text)?.groupValues?.get(1)?.toBooleanStrictOrNull()
+            ?: condRegex.find(text)?.groupValues?.get(1)?.toBooleanStrictOrNull()
+            ?: isAngryRegex.find(text)?.groupValues?.get(1)?.toBooleanStrictOrNull()
+            ?: matchedRegex.find(text)?.groupValues?.get(1)?.toBooleanStrictOrNull()
+            ?: when {
+                text.startsWith("true", ignoreCase = true) -> true
+                text.startsWith("false", ignoreCase = true) -> false
+                else -> false
+            }
+
+        val reason = reasonRegex.find(text)?.groupValues?.get(1)?.ifBlank { null }
+            ?: if (matched) "Target emotional tone detected" else "Target emotional tone not detected"
+
+        return ToneAnalysisResult(
+            toneMatched = matched,
+            reason = reason
+        )
+    }
+
     fun parseConditionResult(rawResponse: String?): SemanticConditionResult {
         if (rawResponse.isNullOrBlank()) {
             return SemanticConditionResult(conditionMatched = false, reason = "Model unavailable", category = "other")
@@ -92,6 +122,11 @@ object K2ResponseParser {
         )
     }
 }
+
+data class ToneAnalysisResult(
+    val toneMatched: Boolean,
+    val reason: String
+)
 
 data class SemanticConditionResult(
     val conditionMatched: Boolean,
