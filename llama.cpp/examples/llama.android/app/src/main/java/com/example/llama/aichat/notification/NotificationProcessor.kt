@@ -3,6 +3,8 @@ package com.example.llama.aichat.notification
 import android.content.Context
 import android.util.Log
 import com.example.llama.aichat.ai.K2InferenceManager
+import com.example.llama.aichat.ai.K2PromptBuilder
+import com.example.llama.aichat.ai.K2ResponseParser
 import com.example.llama.aichat.ai.RuleClassifier
 import com.example.llama.aichat.ai.RuleIntent
 import com.example.llama.aichat.data.NotificationRecord
@@ -245,20 +247,69 @@ class NotificationProcessor(
             var finalSummary = defaultCleanSummary
             var aiCategory = inferCategoryFromContent(contentLower, appLower, data.category)
 
-            // 3. User Rules Evaluation (Pure Ahead-of-Time / AOT Engine <0.2ms)
+            // 3. User Rules Evaluation (Hybrid Dual-Engine: AOT Fast Engine + Selective K2 Deep Reasoning)
             val enabledRules = ruleRepository.getEnabledRules()
 
             if (enabledRules.isEmpty()) {
                 decisionReason = "No active user rules"
                 aiCategory = "other"
             } else {
-                var hasPositiveMatch = false
-                var hasExplicitExclusion = false
-                var exclusionReason = ""
-                var positiveReason = ""
-                var matchedRuleText = ""
+                // Check if any matching candidate rule requires K2 Deep AI Reasoning (emotions, subjective tone, urgency)
+                val candidateDeepRule = enabledRules.firstOrNull { rule ->
+                    if (rule.semanticDepth != "K2_DEEP") return@firstOrNull false
+                    val targetPerson = rule.targetPerson
+                    val targetApps = rule.getTargetApps()
+                    val isPersonRule = !targetPerson.isNullOrBlank()
+                    val isAppRule = targetApps.isNotEmpty()
 
-                for (rule in enabledRules) {
+                    val senderMatches = isPersonRule && isSenderMatch(targetPerson, data)
+                    val appMatch = if (isAppRule) {
+                        targetApps.any { targetApp ->
+                            packageLower.contains(targetApp.lowercase()) || appLower.contains(targetApp.lowercase())
+                        }
+                    } else false
+
+                    (isPersonRule && senderMatches) || (isAppRule && appMatch) || (!isPersonRule && !isAppRule)
+                }
+
+                var executedViaK2 = false
+
+                if (candidateDeepRule != null) {
+                    Log.d("NotificationProcessor", "Candidate matched K2_DEEP rule: ${candidateDeepRule.text}. Routing to K2 LLM...")
+                    val prompt = K2PromptBuilder.buildPrompt(
+                        rules = enabledRules.map { it.text },
+                        appName = data.appName,
+                        packageName = data.packageName,
+                        title = data.title,
+                        text = data.text,
+                        sender = data.sender
+                    )
+                    val rawResponse = inferenceManager.analyze(prompt)
+                    if (!rawResponse.isNullOrBlank()) {
+                        val analysis = K2ResponseParser.parse(rawResponse, defaultCleanSummary)
+                        isImportant = analysis.important
+                        shouldAlert = analysis.alert
+                        decisionReason = "[🧠 K2 Deep AI] ${analysis.reason}"
+                        if (analysis.category.isNotBlank() && analysis.category != "other") {
+                            aiCategory = analysis.category
+                        }
+                        if (analysis.summary.isNotBlank()) {
+                            finalSummary = analysis.summary
+                        }
+                        executedViaK2 = true
+                    } else {
+                        Log.w("NotificationProcessor", "K2 inference returned null/unavailable; falling back to AOT evaluation")
+                    }
+                }
+
+                if (!executedViaK2) {
+                    var hasPositiveMatch = false
+                    var hasExplicitExclusion = false
+                    var exclusionReason = ""
+                    var positiveReason = ""
+                    var matchedRuleText = ""
+
+                    for (rule in enabledRules) {
                     val targetPerson = rule.targetPerson
                     val action = rule.action
                     val positiveTopics = rule.getPositiveTopics()
@@ -366,6 +417,7 @@ class NotificationProcessor(
                     shouldAlert = false
                     decisionReason = "General notification; no matching rule"
                     aiCategory = "other"
+                }
                 }
             }
 

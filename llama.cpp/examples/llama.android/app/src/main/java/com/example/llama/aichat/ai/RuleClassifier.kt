@@ -19,7 +19,8 @@ data class ParsedRule(
     val targetApps: Set<String> = emptySet(),
     val positiveTopics: Set<String> = emptySet(),
     val excludedTopics: Set<String> = emptySet(),
-    val isNegative: Boolean = false
+    val isNegative: Boolean = false,
+    val semanticDepth: String = "AOT_FAST"
 ) {
     fun toNotificationRule(id: Long = 0L, enabled: Boolean = true): NotificationRule {
         return NotificationRule(
@@ -32,7 +33,7 @@ data class ParsedRule(
             excludedTopicsJson = JsonListHelper.toJson(excludedTopics),
             targetAppsJson = JsonListHelper.toJson(targetApps),
             ruleIntent = intent.name,
-            semanticDepth = "AOT_FAST",
+            semanticDepth = semanticDepth,
             createdAt = System.currentTimeMillis(),
             updatedAt = System.currentTimeMillis()
         )
@@ -179,8 +180,22 @@ object RuleClassifier {
         "spotify" to listOf("spotify", "com.spotify.music")
     )
 
+    private val EMOTION_AND_TONE_KEYWORDS = setOf(
+        "angry", "furious", "mad", "frustrated", "annoyed", "sarcastic", "sarcasm", "joke", "jokes",
+        "funny", "humor", "serious", "sad", "crying", "depressed", "happy", "excited", "rude",
+        "aggressive", "urgent tone", "urgency", "emergency", "crisis", "bad news", "good news",
+        "scam", "suspicious", "phishing", "fight", "quarrel", "abusive", "abuse", "mood", "feeling"
+    )
+
     fun classify(ruleText: String): ParsedRule {
         val lower = ruleText.lowercase().trim()
+        val ruleTokens = lower.split(Regex("[^a-zA-Z0-9_]+")).filter { it.isNotBlank() }.toSet()
+
+        // Detect if rule requires on-device LLM deep reasoning for emotion/tone/subjectivity (word boundary match)
+        val isDeepReasoningRequired = EMOTION_AND_TONE_KEYWORDS.any { trigger ->
+            if (trigger.contains(" ")) lower.contains(trigger) else ruleTokens.contains(trigger)
+        }
+        val semanticDepth = if (isDeepReasoningRequired) "K2_DEEP" else "AOT_FAST"
 
         // Detect if rule has positive intent (e.g. "from madhu is important", "alert for arjun")
         val hasPositiveClause = lower.contains("is important") || lower.contains("are important") ||
@@ -188,15 +203,14 @@ object RuleClassifier {
                 lower.contains("priority") || lower.contains("urgent") ||
                 lower.contains("notify me") || lower.contains("tell me")
 
-        // A rule is purely negative ONLY if there is no positive clause AND it explicitly says block/ignore/mute/never
-        val isPureNegative = !hasPositiveClause && (
-            lower.startsWith("block ") || lower.startsWith("ignore ") ||
+        val isExplicitNegative = lower.startsWith("block ") || lower.startsWith("ignore ") ||
             lower.startsWith("mute ") || lower.startsWith("never alert") ||
             lower.startsWith("do not alert") || lower.startsWith("dont alert") ||
             lower.startsWith("no alert") || lower.endsWith("not important") ||
             lower.endsWith("never important") || lower.startsWith("ignore all ") ||
             lower.startsWith("mute all ")
-        )
+
+        val isPureNegative = !hasPositiveClause && !isDeepReasoningRequired && isExplicitNegative
 
         val action = if (isPureNegative) "MUTE" else "ALERT"
 
@@ -227,6 +241,14 @@ object RuleClassifier {
 
         // 3. Extract Raw Excluded Anchors (Exceptions / Negations)
         val rawExcludedAnchors = extractExcludedAnchors(lower).toMutableSet()
+
+        // Guarantee person name and apps are never treated as excluded topics
+        if (targetName != null) {
+            rawExcludedAnchors.remove(targetName.lowercase())
+            val targetParts = targetName.lowercase().split(Regex("[^a-zA-Z0-9_]+"))
+            rawExcludedAnchors.removeAll(targetParts.toSet())
+        }
+        rawExcludedAnchors.removeAll(KNOWN_APP_KEYWORDS.keys)
 
         // 4. Extract Positive Topic Anchors
         val allTokens = lower.split(Regex("[^a-zA-Z0-9_]+")).filter { it.length >= 3 }
@@ -277,7 +299,8 @@ object RuleClassifier {
             targetApps = targetApps,
             positiveTopics = expandedPositiveTopics,
             excludedTopics = expandedExcludedTopics,
-            isNegative = isPureNegative
+            isNegative = isPureNegative,
+            semanticDepth = semanticDepth
         )
     }
 

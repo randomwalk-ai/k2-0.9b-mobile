@@ -270,6 +270,25 @@ class K2AiTest {
     }
 
     @Test
+    fun testEmotionRuleClassificationPranavAngry() {
+        val rule = RuleClassifier.classify("any msg from Pranav when he is angry is not important")
+        assertEquals("K2_DEEP", rule.semanticDepth)
+        assertEquals("pranav", rule.targetPerson)
+        assertFalse(rule.excludedTopics.contains("pranav"))
+
+        val k2AngryResponse = """{"important": false, "alert": false, "reason": "Pranav is angry and confrontational", "category": "messages"}"""
+        val angryAnalysis = K2ResponseParser.parse(k2AngryResponse)
+        assertFalse(angryAnalysis.important)
+        assertFalse(angryAnalysis.alert)
+        assertTrue(angryAnalysis.reason.contains("angry"))
+
+        val k2HappyResponse = """{"important": true, "alert": true, "reason": "Pranav is congratulating with excitement", "category": "messages"}"""
+        val happyAnalysis = K2ResponseParser.parse(k2HappyResponse)
+        assertTrue(happyAnalysis.important)
+        assertTrue(happyAnalysis.alert)
+    }
+
+    @Test
     fun testHandleMatchingVariations() {
         val ruleTarget = "arjun"
         assertTrue(matchesPersonNameSimulated(ruleTarget, "Arjun"))
