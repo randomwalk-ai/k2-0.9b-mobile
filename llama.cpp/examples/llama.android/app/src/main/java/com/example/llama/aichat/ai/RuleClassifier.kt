@@ -6,7 +6,7 @@ import com.example.llama.aichat.data.NotificationRule
 enum class RuleIntent {
     SIMPLE_CONTACT,      // Pure contact name match (e.g. "Madhu", "Arjun")
     SIMPLE_BLOCK,        // Pure contact block (e.g. "Block Bob", "Ignore Spammer")
-    CONDITIONAL_CONTACT, // Person rule with topic/negation (e.g. "Arjun not movies", "Arjun only games")
+    CONDITIONAL_CONTACT, // Person rule with topic/negation (e.g. "Arjun not movies", "Arjun only games", "Madhu not reels")
     TOPIC_FILTER,        // Domain / Topic rule (e.g. "Bank transactions and OTP", "Job interviews")
     APP_FILTER           // App-specific rule (e.g. "Slack P0 alerts", "Uber cab arrival")
 }
@@ -50,11 +50,18 @@ object RuleClassifier {
         "calls", "call", "text", "texts", "about", "related", "relating", "regarding",
         "if", "only", "when", "then", "which", "that", "this", "there", "their",
         "should", "would", "could", "must", "of", "an", "a", "or", "as", "me", "my",
-        "tell", "notify", "update", "updates", "get", "give", "send"
+        "tell", "notify", "update", "updates", "get", "give", "send", "sends", "share", "shares",
+        "he", "she", "they", "him", "her"
     )
 
     // Comprehensive Domain Semantic Knowledge Graph for Ahead-Of-Time (AOT) Synonym Expansion
     private val DOMAIN_SYNONYMS = mapOf(
+        // Social Media, Reels & Videos
+        "reel" to listOf("reel", "reels", "video", "videos", "clip", "clips", "instagram.com/reel", "shared a reel", "sent a reel", "watch reel"),
+        "reels" to listOf("reel", "reels", "video", "videos", "clip", "clips", "instagram.com/reel", "shared a reel", "sent a reel", "watch reel"),
+        "video" to listOf("video", "videos", "reel", "reels", "clip", "clips", "media", "youtube"),
+        "videos" to listOf("video", "videos", "reel", "reels", "clip", "clips", "media", "youtube"),
+
         // Gaming & Sports
         "game" to listOf("game", "games", "gaming", "gamer", "cricket", "football", "soccer", "bgmi", "pubg", "cod", "valorant", "fifa", "chess", "playstation", "xbox", "steam", "nintendo", "esports", "tournament", "match", "raid", "scrims", "discord"),
         "games" to listOf("game", "games", "gaming", "gamer", "cricket", "football", "soccer", "bgmi", "pubg", "cod", "valorant", "fifa", "chess", "playstation", "xbox", "steam", "nintendo", "esports", "tournament", "match", "raid", "scrims", "discord"),
@@ -158,14 +165,23 @@ object RuleClassifier {
     fun classify(ruleText: String): ParsedRule {
         val lower = ruleText.lowercase().trim()
 
-        val isExplicitNegative = lower.startsWith("block ") || lower.startsWith("ignore ") ||
-                lower.startsWith("mute ") || lower.contains("never alert") ||
-                lower.contains("do not alert") || lower.contains("dont alert") ||
-                lower.contains("no alert") || lower.contains("not important") ||
-                lower.contains("never important") ||
-                lower.contains("ignore all ") || lower.contains("mute all ")
+        // Detect if rule has positive intent (e.g. "from madhu is important", "alert for arjun")
+        val hasPositiveClause = lower.contains("is important") || lower.contains("are important") ||
+                lower.contains("it is important") || lower.contains("alert") ||
+                lower.contains("priority") || lower.contains("urgent") ||
+                lower.contains("notify me") || lower.contains("tell me")
 
-        val action = if (isExplicitNegative) "MUTE" else "ALERT"
+        // A rule is purely negative ONLY if there is no positive clause AND it explicitly says block/ignore/mute/never
+        val isPureNegative = !hasPositiveClause && (
+            lower.startsWith("block ") || lower.startsWith("ignore ") ||
+            lower.startsWith("mute ") || lower.startsWith("never alert") ||
+            lower.startsWith("do not alert") || lower.startsWith("dont alert") ||
+            lower.startsWith("no alert") || lower.endsWith("not important") ||
+            lower.endsWith("never important") || lower.startsWith("ignore all ") ||
+            lower.startsWith("mute all ")
+        )
+
+        val action = if (isPureNegative) "MUTE" else "ALERT"
 
         // 1. Extract Target Apps
         val targetApps = mutableSetOf<String>()
@@ -207,24 +223,24 @@ object RuleClassifier {
             token !in appTokens
         }.toSet()
 
-        // If rule is explicitly negative (e.g. "whatever from arjun related to movies, never important"),
+        // If rule is purely negative (e.g. "whatever from arjun related to movies, never important"),
         // any topic anchor is an exclusion anchor!
-        if (isExplicitNegative && rawPositiveAnchors.isNotEmpty()) {
+        if (isPureNegative && rawPositiveAnchors.isNotEmpty()) {
             rawExcludedAnchors.addAll(rawPositiveAnchors)
         }
 
         val expandedExcludedTopics = expandTopicSet(rawExcludedAnchors)
-        val finalPositiveAnchors = if (isExplicitNegative) emptySet() else rawPositiveAnchors
+        val finalPositiveAnchors = if (isPureNegative) emptySet() else rawPositiveAnchors
         val expandedPositiveTopics = expandTopicSet(finalPositiveAnchors)
 
         val hasCondition = expandedPositiveTopics.isNotEmpty() || expandedExcludedTopics.isNotEmpty()
 
         val intent = when {
             // Case 1: Pure block with no condition -> SIMPLE_BLOCK
-            isPersonRule && isExplicitNegative && !hasCondition -> RuleIntent.SIMPLE_BLOCK
+            isPersonRule && isPureNegative && !hasCondition -> RuleIntent.SIMPLE_BLOCK
 
             // Case 2: Pure positive contact -> SIMPLE_CONTACT
-            isPersonRule && !isExplicitNegative && !hasCondition -> RuleIntent.SIMPLE_CONTACT
+            isPersonRule && !isPureNegative && !hasCondition -> RuleIntent.SIMPLE_CONTACT
 
             // Case 3: Person rule with condition/exceptions -> CONDITIONAL_CONTACT
             isPersonRule && hasCondition -> RuleIntent.CONDITIONAL_CONTACT
@@ -244,7 +260,7 @@ object RuleClassifier {
             targetApps = targetApps,
             positiveTopics = expandedPositiveTopics,
             excludedTopics = expandedExcludedTopics,
-            isNegative = isExplicitNegative
+            isNegative = isPureNegative
         )
     }
 
@@ -252,7 +268,7 @@ object RuleClassifier {
         val topicRoots = setOf(
             "bank", "otp", "debit", "credit", "money", "food", "order", "delivery",
             "job", "interview", "ride", "cab", "flight", "train", "bill", "p0", "pr",
-            "game", "games", "movie", "movies", "slack", "teams", "swiggy", "uber"
+            "game", "games", "movie", "movies", "slack", "teams", "swiggy", "uber", "reel", "reels"
         )
         return tokens.any { it in topicRoots }
     }
@@ -341,6 +357,22 @@ object RuleClassifier {
                 }
             }
         }
-        return emptySet()
+
+        // Secondary negation clauses: "... if he/she sends reels it is not important" or "... reels is not important"
+        if (lowerText.contains("not important") || lowerText.contains("never important") || lowerText.contains("no alert")) {
+            val negationPrefix = when {
+                lowerText.contains("not important") -> lowerText.substringBefore("not important")
+                lowerText.contains("never important") -> lowerText.substringBefore("never important")
+                lowerText.contains("no alert") -> lowerText.substringBefore("no alert")
+                else -> ""
+            }
+            val lastSegment = negationPrefix.substringAfterLast(",").substringAfterLast(" if ").substringAfterLast(" but ").trim()
+            val tokens = lastSegment.split(Regex("[^a-zA-Z0-9_]+")).filter {
+                it.length >= 3 && it !in FUNCTIONAL_STOP_WORDS
+            }
+            result.addAll(tokens)
+        }
+
+        return result
     }
 }

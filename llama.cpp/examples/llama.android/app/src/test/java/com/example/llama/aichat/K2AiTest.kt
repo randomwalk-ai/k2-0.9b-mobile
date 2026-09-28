@@ -46,6 +46,16 @@ class K2AiTest {
     }
 
     @Test
+    fun testMultiClauseRuleMadhuReels() {
+        val rule = RuleClassifier.classify("if any message from madhu it is important,if he she sends reels it is not important")
+        assertEquals(RuleIntent.CONDITIONAL_CONTACT, rule.intent)
+        assertEquals("madhu", rule.targetPerson)
+        assertEquals("ALERT", rule.action)
+        assertFalse(rule.isNegative)
+        assertTrue(rule.excludedTopics.contains("reels") || rule.excludedTopics.contains("reel"))
+    }
+
+    @Test
     fun testRuleClassifierJobTopic() {
         val rule = RuleClassifier.classify("if someone messages about job related it is important")
         assertEquals(RuleIntent.TOPIC_FILTER, rule.intent)
