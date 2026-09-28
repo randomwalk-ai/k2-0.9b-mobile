@@ -265,17 +265,22 @@ class NotificationProcessor(
                     val excludedTopics = rule.getExcludedTopics()
                     val targetApps = rule.getTargetApps()
 
+                    val isPersonRule = !targetPerson.isNullOrBlank()
+                    val isAppRule = targetApps.isNotEmpty()
+
                     // If rule has app restrictions, verify notification app matches (or topic matches)
-                    if (targetApps.isNotEmpty()) {
-                        val appMatch = targetApps.any { targetApp ->
+                    val appMatch = if (isAppRule) {
+                        targetApps.any { targetApp ->
                             packageLower.contains(targetApp.lowercase()) || appLower.contains(targetApp.lowercase())
                         }
+                    } else false
+
+                    if (isAppRule && !appMatch) {
                         val hasTopicMatch = positiveTopics.any { textMatchesDynamicAnchor(contentLower, it) }
-                        if (!appMatch && !hasTopicMatch) continue
+                        if (!hasTopicMatch) continue
                     }
 
                     // Evaluate sender match
-                    val isPersonRule = !targetPerson.isNullOrBlank()
                     val senderMatches = isPersonRule && isSenderMatch(targetPerson, data)
 
                     // Case A: Person rule where sender does NOT match -> Skip (Prevents body mentions like "Hi madhu" by Arjun from triggering Madhu's rule)
@@ -301,6 +306,10 @@ class NotificationProcessor(
                             hasExplicitExclusion = true
                             exclusionReason = "[⚡ Blocked] Muted sender: ${rule.text}"
                             break
+                        } else if (isAppRule && !isPersonRule && appMatch) {
+                            hasExplicitExclusion = true
+                            exclusionReason = "[⚡ Blocked] Muted app: ${rule.text}"
+                            break
                         }
                     }
 
@@ -312,20 +321,34 @@ class NotificationProcessor(
                     // Check Pure Contact Rule (no topics required)
                     val isPureContact = isPersonRule && positiveTopics.isEmpty() && excludedTopics.isEmpty()
 
+                    // Check Pure App Rule (no person, no topics required - e.g. "any msg from teams app is important")
+                    val isPureApp = isAppRule && !isPersonRule && positiveTopics.isEmpty() && excludedTopics.isEmpty()
+
                     if (isPureContact && senderMatches) {
                         hasPositiveMatch = true
                         matchedRuleText = rule.text
                         positiveReason = "[⚡ Fast Rule] Matched contact: ${rule.text}"
-                    } else if (matchesPositiveTopic) {
+                    } else if (isPureApp && appMatch) {
                         hasPositiveMatch = true
                         matchedRuleText = rule.text
-                        val hitAnchor = positiveTopics.firstOrNull { textMatchesDynamicAnchor(contentLower, it) } ?: "topic"
-                        positiveReason = "[⚡ Fast Rule] Matched '$hitAnchor' in rule: ${rule.text}"
+                        positiveReason = "[⚡ Fast Rule] Matched app: ${rule.text}"
+                    } else if (matchesPositiveTopic) {
+                        if (!isAppRule || appMatch) {
+                            hasPositiveMatch = true
+                            matchedRuleText = rule.text
+                            val hitAnchor = positiveTopics.firstOrNull { textMatchesDynamicAnchor(contentLower, it) } ?: "topic"
+                            positiveReason = "[⚡ Fast Rule] Matched '$hitAnchor' in rule: ${rule.text}"
+                        }
                     } else if (isPersonRule && senderMatches && excludedTopics.isNotEmpty() && !matchesExclusion) {
                         // Person rule with exclusions only (e.g. "Arjun not movies") and no exclusion matched!
                         hasPositiveMatch = true
                         matchedRuleText = rule.text
                         positiveReason = "[⚡ Fast Rule] Matched: ${rule.text}"
+                    } else if (isAppRule && !isPersonRule && appMatch && excludedTopics.isNotEmpty() && !matchesExclusion) {
+                        // App rule with exclusions only (e.g. "Teams not memes") and no exclusion matched!
+                        hasPositiveMatch = true
+                        matchedRuleText = rule.text
+                        positiveReason = "[⚡ Fast Rule] Matched app: ${rule.text}"
                     }
                 }
 

@@ -251,6 +251,25 @@ class K2AiTest {
     }
 
     @Test
+    fun testAppLevelRuleClassification() {
+        val rule1 = RuleClassifier.classify("any msg from teams app is important")
+        assertEquals(RuleIntent.APP_FILTER, rule1.intent)
+        assertNull(rule1.targetPerson)
+        assertTrue(rule1.targetApps.contains("teams"))
+        assertEquals("ALERT", rule1.action)
+
+        val rule2 = RuleClassifier.classify("any message from teams is important")
+        assertEquals(RuleIntent.APP_FILTER, rule2.intent)
+        assertNull(rule2.targetPerson)
+        assertTrue(rule2.targetApps.contains("teams"))
+
+        val rule3 = RuleClassifier.classify("all notifications from slack")
+        assertEquals(RuleIntent.APP_FILTER, rule3.intent)
+        assertNull(rule3.targetPerson)
+        assertTrue(rule3.targetApps.contains("slack"))
+    }
+
+    @Test
     fun testHandleMatchingVariations() {
         val ruleTarget = "arjun"
         assertTrue(matchesPersonNameSimulated(ruleTarget, "Arjun"))

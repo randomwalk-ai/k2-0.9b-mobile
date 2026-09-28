@@ -51,7 +51,8 @@ object RuleClassifier {
         "if", "only", "when", "then", "which", "that", "this", "there", "their",
         "should", "would", "could", "must", "of", "an", "a", "or", "as", "me", "my",
         "tell", "notify", "update", "updates", "get", "give", "send", "sends", "share", "shares",
-        "he", "she", "they", "him", "her"
+        "he", "she", "they", "him", "her",
+        "app", "apps", "application", "applications", "channel", "channels", "group", "groups", "chat", "chats", "dm", "dms"
     )
 
     // Comprehensive Domain Semantic Knowledge Graph for Ahead-Of-Time (AOT) Synonym Expansion
@@ -139,12 +140,17 @@ object RuleClassifier {
     )
 
     private val KNOWN_APP_KEYWORDS = mapOf(
-        "whatsapp" to listOf("whatsapp", "com.whatsapp"),
+        "whatsapp" to listOf("whatsapp", "com.whatsapp", "com.whatsapp.w4b"),
         "instagram" to listOf("instagram", "com.instagram.android"),
-        "telegram" to listOf("telegram", "org.telegram.messenger"),
+        "telegram" to listOf("telegram", "org.telegram.messenger", "org.telegram.plus"),
         "slack" to listOf("slack", "com.Slack"),
         "teams" to listOf("teams", "microsoft teams", "com.microsoft.teams"),
         "pagerduty" to listOf("pagerduty", "com.pagerduty.android"),
+        "datadog" to listOf("datadog", "com.datadog.android"),
+        "github" to listOf("github", "com.github.android"),
+        "jira" to listOf("jira", "com.atlassian.jira.mobile"),
+        "discord" to listOf("discord", "com.discord"),
+        "outlook" to listOf("outlook", "com.microsoft.office.outlook"),
         "linkedin" to listOf("linkedin", "com.linkedin.android"),
         "gmail" to listOf("gmail", "google mail", "com.google.android.gm"),
         "phonepe" to listOf("phonepe", "com.phonepe.app"),
@@ -155,11 +161,22 @@ object RuleClassifier {
         "zomato" to listOf("zomato", "com.application.zomato"),
         "blinkit" to listOf("blinkit", "com.grofers.customerapp"),
         "zepto" to listOf("zepto", "com.zepto.app"),
+        "instamart" to listOf("instamart", "in.swiggy.android"),
+        "bigbasket" to listOf("bigbasket", "com.bigbasket.mobileapp"),
         "amazon" to listOf("amazon", "in.amazon.mShop.android.shopping"),
         "flipkart" to listOf("flipkart", "com.flipkart.android"),
+        "myntra" to listOf("myntra", "com.myntra.android"),
         "uber" to listOf("uber", "com.ubercab"),
         "ola" to listOf("ola", "com.olacabs.customer"),
-        "irctc" to listOf("irctc", "cris.org.in.prs.ima")
+        "rapido" to listOf("rapido", "com.rapido.passenger"),
+        "irctc" to listOf("irctc", "cris.org.in.prs.ima"),
+        "makemytrip" to listOf("makemytrip", "com.makemytrip"),
+        "goibibo" to listOf("goibibo", "com.goibibo"),
+        "bookmyshow" to listOf("bookmyshow", "com.bt.bms"),
+        "hotstar" to listOf("hotstar", "disney+ hotstar", "in.startv.hotstar"),
+        "netflix" to listOf("netflix", "com.netflix.mediaclient"),
+        "youtube" to listOf("youtube", "com.google.android.youtube"),
+        "spotify" to listOf("spotify", "com.spotify.music")
     )
 
     fun classify(ruleText: String): ParsedRule {
@@ -311,6 +328,14 @@ object RuleClassifier {
             }
             else -> null
         } ?: return null
+
+        val rawAfterTokens = afterFrom.split(Regex("[^a-zA-Z0-9_]+")).filter { it.isNotBlank() }
+        if (rawAfterTokens.isNotEmpty()) {
+            val firstToken = rawAfterTokens.first()
+            if (firstToken in KNOWN_APP_KEYWORDS.keys || firstToken in FUNCTIONAL_STOP_WORDS) {
+                return null
+            }
+        }
 
         val tokens = afterFrom.split(Regex("[^a-zA-Z0-9_]+")).filter { it.length >= 2 && it !in FUNCTIONAL_STOP_WORDS && it !in KNOWN_APP_KEYWORDS.keys }
         val candidate = tokens.firstOrNull()
