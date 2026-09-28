@@ -486,10 +486,13 @@ fun RulesSection(
                                 color = if (rule.enabled) MaterialTheme.colorScheme.onSurface else Color.Gray
                             )
                             Spacer(modifier = Modifier.height(4.dp))
+                            val isDeepRule = parsed.semanticDepth == "K2_DEEP" || rule.semanticDepth == "K2_DEEP"
                             // Rule engine badge
                             Surface(
                                 shape = RoundedCornerShape(4.dp),
-                                color = when (parsed.intent) {
+                                color = if (isDeepRule) {
+                                    Color(0xFF6A1B9A).copy(alpha = 0.18f)
+                                } else when (parsed.intent) {
                                     RuleIntent.SIMPLE_CONTACT -> Color(0xFF1B5E20).copy(alpha = 0.15f)
                                     RuleIntent.SIMPLE_BLOCK -> Color(0xFFB71C1C).copy(alpha = 0.15f)
                                     RuleIntent.CONDITIONAL_CONTACT -> Color(0xFF0D47A1).copy(alpha = 0.15f)
@@ -498,7 +501,9 @@ fun RulesSection(
                                 }
                             ) {
                                 Text(
-                                    text = when (parsed.intent) {
+                                    text = if (isDeepRule) {
+                                        "🧠 K2 Deep AI (On-Demand)"
+                                    } else when (parsed.intent) {
                                         RuleIntent.SIMPLE_CONTACT -> "⚡ Fast Contact (<0.2ms)"
                                         RuleIntent.SIMPLE_BLOCK -> "🚫 Direct Block (<0.2ms)"
                                         RuleIntent.CONDITIONAL_CONTACT -> "⚡ AOT Conditional (<0.2ms)"
@@ -507,7 +512,9 @@ fun RulesSection(
                                     },
                                     fontSize = 10.sp,
                                     fontWeight = FontWeight.Bold,
-                                    color = when (parsed.intent) {
+                                    color = if (isDeepRule) {
+                                        Color(0xFFAB47BC)
+                                    } else when (parsed.intent) {
                                         RuleIntent.SIMPLE_CONTACT -> Color(0xFF2E7D32)
                                         RuleIntent.SIMPLE_BLOCK -> Color(0xFFD32F2F)
                                         RuleIntent.CONDITIONAL_CONTACT -> Color(0xFF1976D2)
@@ -573,8 +580,8 @@ fun NotificationItem(
     isImportant: Boolean,
     onClick: () -> Unit
 ) {
-    val isK2Ai = record.reason.contains("🧠 K2 AI") || record.reason.contains("[🧠 K2 AI]")
-    val isFastRule = record.reason.contains("⚡ Fast") || record.reason.contains("[⚡ Fast")
+    val isK2Ai = record.reason.contains("K2 Deep AI") || record.reason.contains("🧠 K2") || record.reason.contains("K2 AI")
+    val isFastRule = record.reason.contains("⚡ Fast") || record.reason.contains("[⚡ Fast") || record.reason.contains("⚡")
 
     Card(
         modifier = Modifier
