@@ -28,14 +28,22 @@ object K2ResponseParser {
         val summaryMatch = summaryRegex.find(text)?.groupValues?.get(1)
         val categoryMatch = categoryRegex.find(text)?.groupValues?.get(1)
 
-        val isImportant = importantMatch ?: when {
+        val rawImportant = importantMatch ?: when {
             text.startsWith("true", ignoreCase = true) -> true
             text.startsWith("false", ignoreCase = true) -> false
             else -> false
         }
 
+        val reason = reasonMatch?.ifBlank { null } ?: if (rawImportant) "Matches user rules" else "General notification"
+        val reasonLower = reason.lowercase()
+        val isExplicitlyStatedNotImportant = reasonLower.contains("not important") ||
+                reasonLower.contains("never important") ||
+                reasonLower.contains("muted") ||
+                reasonLower.contains("is ignored") ||
+                reasonLower.contains("should be ignored")
+
+        val isImportant = if (isExplicitlyStatedNotImportant) false else rawImportant
         val isAlert = if (isImportant) (alertMatch ?: false) else false
-        val reason = reasonMatch?.ifBlank { null } ?: if (isImportant) "Matches user rules" else "General notification"
         val summary = summaryMatch?.ifBlank { null } ?: defaultSummary
         val category = categoryMatch?.ifBlank { null } ?: if (isImportant) "important" else "other"
 
