@@ -803,11 +803,11 @@ fun AddRuleDialog(
 ) {
     var text by remember { mutableStateOf(initialText) }
     val suggestions = listOf(
-        "Urgent messages from Mom are important",
-        "Whatever message from Arjun related to movies is never important",
-        "If someone messages about job related it is important",
+        "Any message from Boss is important",
+        "Teams app notifications are important",
         "OTP and bank transaction alerts are important",
-        "Delivery and courier updates are important"
+        "Food delivery and ride status are important",
+        "Mute all promotional offers"
     )
 
     AlertDialog(

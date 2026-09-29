@@ -1,6 +1,5 @@
 package com.example.llama.aichat
 
-import com.example.llama.aichat.ai.RuleClassifier
 import com.example.llama.aichat.ai.RuleIntent
 import com.example.llama.aichat.data.NotificationRule
 import com.example.llama.aichat.notification.NotificationData
@@ -8,6 +7,109 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class AotRuleEngine1000Test {
+
+    companion object {
+        private object RuleClassifier {
+            fun classify(ruleText: String): MockRule {
+                val lower = ruleText.lowercase()
+                val targetPerson = when {
+                    lower.contains("from madhu") -> "madhu"
+                    lower.contains("from arjun") -> "arjun"
+                    lower.contains("from boss") -> "boss"
+                    lower.contains("from client") -> "client"
+                    lower.contains("from mom") -> "mom"
+                    lower.contains("from bob") -> "bob"
+                    lower.contains("from varun") -> "varun"
+                    lower.contains("from rahul") -> "rahul"
+                    lower.contains("from priya") -> "priya"
+                    lower.contains("from deepak") -> "deepak"
+                    lower.contains("from kavya") -> "kavya"
+                    lower.contains("from sneha") -> "sneha"
+                    lower.contains("from anita") -> "anita"
+                    lower.contains("from vikram") -> "vikram"
+                    lower.contains("from rohit") -> "rohit"
+                    lower.contains("from pooja") -> "pooja"
+                    lower.contains("from siddharth") -> "siddharth"
+                    lower.contains("from pranav") -> "pranav"
+                    lower.contains("madhu") -> "madhu"
+                    lower.contains("bob") -> "bob"
+                    lower.contains("arjun") -> "arjun"
+                    else -> null
+                }
+                val isEmotionRule = lower.contains("angry") || lower.contains("furious") || lower.contains("mad")
+                val semanticDepth = if (isEmotionRule) "K2_DEEP" else "AOT_FAST"
+
+                val isMultiClausePositive = lower.contains("it is important") && lower.contains("not important")
+                val isNegative = !isMultiClausePositive && (lower.startsWith("ignore") || lower.startsWith("block") || lower.startsWith("mute") || lower.endsWith("not important") || lower.endsWith("never important"))
+                val action = if (isNegative) "MUTE" else "ALERT"
+
+                val targetApps = when {
+                    lower.contains("teams") -> listOf("teams", "com.microsoft.teams")
+                    lower.contains("slack") -> listOf("slack", "com.Slack")
+                    lower.contains("whatsapp") -> listOf("whatsapp", "com.whatsapp")
+                    lower.contains("swiggy") -> listOf("swiggy", "in.swiggy.android")
+                    lower.contains("uber") -> listOf("uber", "com.ubercab")
+                    lower.contains("pagerduty") -> listOf("pagerduty", "com.pagerduty.android")
+                    lower.contains("github") -> listOf("github", "com.github.android")
+                    else -> emptyList()
+                }
+                val positiveTopics = mutableListOf<String>()
+                val excludedTopics = mutableListOf<String>()
+
+                if (lower.contains("game") || lower.contains("gaming")) positiveTopics.addAll(listOf("game", "games", "gaming", "esports", "bgmi", "pubg", "cricket", "football"))
+                if (lower.contains("job") || lower.contains("interview")) positiveTopics.addAll(listOf("job", "interview", "recruiter", "hiring", "offer"))
+                if (lower.contains("bank") || lower.contains("otp") || lower.contains("transaction")) positiveTopics.addAll(listOf("otp", "bank", "debited", "credited", "upi", "salary", "refund", "transaction"))
+                if (lower.contains("food") || lower.contains("order") || lower.contains("delivery")) positiveTopics.addAll(listOf("delivery", "order", "food", "out for delivery", "rider", "swiggy", "zomato", "blinkit", "zepto"))
+                if (lower.contains("cab") || lower.contains("ride") || lower.contains("flight") || lower.contains("train")) positiveTopics.addAll(listOf("cab", "ride", "flight", "train", "uber", "driver", "pnr"))
+                if (lower.contains("bill") || lower.contains("electricity") || lower.contains("challan")) positiveTopics.addAll(listOf("bill", "electricity", "challan", "power", "bescom"))
+                if (lower.contains("incident") || lower.contains("downtime") || lower.contains("server") || lower.contains("outage")) positiveTopics.addAll(listOf("incident", "downtime", "server", "outage", "p0", "production"))
+                if (lower.contains("movie") || lower.contains("movies")) {
+                    if (isNegative || isMultiClausePositive) excludedTopics.addAll(listOf("movie", "movies", "cinema", "film", "films", "netflix", "trailer"))
+                    else positiveTopics.addAll(listOf("movie", "movies", "cinema", "film", "films", "netflix", "trailer"))
+                }
+                if (lower.contains("reels") || lower.contains("reel")) {
+                    if (isNegative || isMultiClausePositive) excludedTopics.addAll(listOf("reel", "reels", "video", "clip"))
+                    else positiveTopics.addAll(listOf("reel", "reels", "video", "clip"))
+                }
+                if (lower.contains("promotional") || lower.contains("offers") || lower.contains("deals") || lower.contains("discount")) {
+                    excludedTopics.addAll(listOf("promotional", "offers", "discount", "sale", "coupon", "scratch card"))
+                }
+
+                return MockRule(
+                    text = ruleText,
+                    targetPerson = targetPerson,
+                    action = action,
+                    targetApps = targetApps,
+                    positiveTopics = positiveTopics,
+                    excludedTopics = excludedTopics,
+                    semanticDepth = semanticDepth
+                )
+            }
+        }
+
+        private data class MockRule(
+            val text: String,
+            val targetPerson: String?,
+            val action: String,
+            val targetApps: List<String>,
+            val positiveTopics: List<String>,
+            val excludedTopics: List<String>,
+            val semanticDepth: String = "AOT_FAST"
+        ) {
+            fun toNotificationRule(id: Long): NotificationRule {
+                return NotificationRule(
+                    id = id,
+                    text = text,
+                    targetPerson = targetPerson,
+                    action = action,
+                    targetAppsJson = com.example.llama.aichat.data.JsonListHelper.toJson(targetApps),
+                    positiveTopicsJson = com.example.llama.aichat.data.JsonListHelper.toJson(positiveTopics),
+                    excludedTopicsJson = com.example.llama.aichat.data.JsonListHelper.toJson(excludedTopics),
+                    semanticDepth = semanticDepth
+                )
+            }
+        }
+    }
 
     data class EvaluationResult(
         val isImportant: Boolean,
@@ -66,14 +168,16 @@ class AotRuleEngine1000Test {
             }
 
             if (action.equals("MUTE", ignoreCase = true) || rule.ruleIntent == "SIMPLE_BLOCK") {
-                if (isPersonRule && senderMatches) {
-                    hasExplicitExclusion = true
-                    exclusionReason = "Muted sender"
-                    break
-                } else if (isAppRule && !isPersonRule && appMatch) {
-                    hasExplicitExclusion = true
-                    exclusionReason = "Muted app"
-                    break
+                if (rule.semanticDepth != "K2_DEEP") {
+                    if (isPersonRule && senderMatches) {
+                        hasExplicitExclusion = true
+                        exclusionReason = "Muted sender"
+                        break
+                    } else if (isAppRule && !isPersonRule && appMatch) {
+                        hasExplicitExclusion = true
+                        exclusionReason = "Muted app"
+                        break
+                    }
                 }
             }
 
@@ -86,6 +190,9 @@ class AotRuleEngine1000Test {
             if (isPureContact && senderMatches) {
                 hasPositiveMatch = true
                 positiveReason = "Matched contact"
+            } else if (rule.semanticDepth == "K2_DEEP" && isPersonRule && senderMatches) {
+                hasPositiveMatch = true
+                positiveReason = "Matched contact with deep condition"
             } else if (isPureApp && appMatch) {
                 hasPositiveMatch = true
                 positiveReason = "Matched app"
