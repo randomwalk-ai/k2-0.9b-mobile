@@ -185,31 +185,25 @@ object K2ResponseParser {
 
             val semanticDepth = if (rawEngine == "K2_DEEP" || intent == RuleIntent.CONDITIONAL_EMOTION) "K2_DEEP" else "AOT_FAST"
 
-            // Target Apps expansion
-            val targetApps = mutableSetOf<String>()
-            for (app in targetAppsList) {
-                val cleanApp = app.lowercase().trim()
-                targetApps.add(cleanApp)
-                val known = RuleClassifier.KNOWN_APP_KEYWORDS[cleanApp]
-                if (known != null) targetApps.addAll(known)
-            }
+            // Target Apps
+            val targetApps = targetAppsList
+                .map { it.lowercase().trim() }
+                .filter { it.isNotEmpty() }
+                .toSet()
 
-            // Person sanitization
+            // Person
             val cleanPerson = rawPerson?.lowercase()?.trim()
 
-            // Topics sanitization & expansion
+            // Topics from K2
             val cleanPositiveTopics = positiveTopicsList
                 .map { it.lowercase().trim() }
-                .filter { it.length >= 2 && it !in RuleClassifier.FUNCTIONAL_STOP_WORDS && it != cleanPerson && it !in targetApps }
+                .filter { it.length >= 2 && it != cleanPerson && it !in targetApps }
                 .toSet()
 
             val cleanExcludedTopics = excludedTopicsList
                 .map { it.lowercase().trim() }
-                .filter { it.length >= 2 && it !in RuleClassifier.FUNCTIONAL_STOP_WORDS && it != cleanPerson && it !in targetApps }
+                .filter { it.length >= 2 && it != cleanPerson && it !in targetApps }
                 .toSet()
-
-            val expandedPositive = RuleClassifier.expandTopicSet(cleanPositiveTopics)
-            val expandedExcluded = RuleClassifier.expandTopicSet(cleanExcludedTopics)
 
             ParsedRule(
                 rawText = rawRuleText,
@@ -217,8 +211,8 @@ object K2ResponseParser {
                 targetPerson = cleanPerson,
                 action = rawAction,
                 targetApps = targetApps,
-                positiveTopics = expandedPositive,
-                excludedTopics = expandedExcluded,
+                positiveTopics = cleanPositiveTopics,
+                excludedTopics = cleanExcludedTopics,
                 isNegative = rawAction == "MUTE",
                 semanticDepth = semanticDepth,
                 semanticCondition = rawCondition

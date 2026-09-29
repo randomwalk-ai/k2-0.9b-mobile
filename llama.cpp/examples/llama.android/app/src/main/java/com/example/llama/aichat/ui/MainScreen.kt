@@ -27,8 +27,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.llama.aichat.ai.K2InferenceManager
-import com.example.llama.aichat.ai.RuleClassifier
-import com.example.llama.aichat.ai.RuleIntent
 import com.example.llama.aichat.data.NotificationRecord
 import com.example.llama.aichat.data.NotificationRule
 import java.text.SimpleDateFormat
@@ -456,7 +454,6 @@ fun RulesSection(
             Text("No rules defined. Tap '+ Add Rule' to configure custom routing.", fontSize = 13.sp, color = Color.Gray)
         } else {
             rules.forEach { rule ->
-                val parsed = remember(rule.text) { RuleClassifier.classify(rule.text) }
                 Card(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -486,43 +483,49 @@ fun RulesSection(
                                 color = if (rule.enabled) MaterialTheme.colorScheme.onSurface else Color.Gray
                             )
                             Spacer(modifier = Modifier.height(4.dp))
-                            val isDeepRule = parsed.semanticDepth == "K2_DEEP" || rule.semanticDepth == "K2_DEEP"
+                            val isDeepRule = rule.semanticDepth == "K2_DEEP" || rule.ruleIntent == "CONDITIONAL_EMOTION"
                             // Rule engine badge
                             Surface(
                                 shape = RoundedCornerShape(4.dp),
-                                color = if (isDeepRule) {
+                                color = if (rule.isCompiling) {
+                                    Color(0xFF0288D1).copy(alpha = 0.15f)
+                                } else if (isDeepRule) {
                                     Color(0xFF6A1B9A).copy(alpha = 0.18f)
-                                } else when (parsed.intent) {
-                                    RuleIntent.SIMPLE_CONTACT -> Color(0xFF1B5E20).copy(alpha = 0.15f)
-                                    RuleIntent.SIMPLE_BLOCK -> Color(0xFFB71C1C).copy(alpha = 0.15f)
-                                    RuleIntent.CONDITIONAL_CONTACT -> Color(0xFF0D47A1).copy(alpha = 0.15f)
-                                    RuleIntent.CONDITIONAL_EMOTION -> Color(0xFF6A1B9A).copy(alpha = 0.18f)
-                                    RuleIntent.TOPIC_FILTER -> Color(0xFF4A148C).copy(alpha = 0.15f)
-                                    RuleIntent.APP_FILTER -> Color(0xFFE65100).copy(alpha = 0.15f)
+                                } else when (rule.ruleIntent) {
+                                    "SIMPLE_CONTACT" -> Color(0xFF1B5E20).copy(alpha = 0.15f)
+                                    "SIMPLE_BLOCK" -> Color(0xFFB71C1C).copy(alpha = 0.15f)
+                                    "CONDITIONAL_CONTACT" -> Color(0xFF0D47A1).copy(alpha = 0.15f)
+                                    "CONDITIONAL_EMOTION" -> Color(0xFF6A1B9A).copy(alpha = 0.18f)
+                                    "APP_FILTER" -> Color(0xFFE65100).copy(alpha = 0.15f)
+                                    else -> Color(0xFF4A148C).copy(alpha = 0.15f)
                                 }
                             ) {
                                 Text(
-                                    text = if (isDeepRule) {
+                                    text = if (rule.isCompiling) {
+                                        "🧠 K2 AI Compiling..."
+                                    } else if (isDeepRule) {
                                         "🧠 K2 Deep AI (On-Demand)"
-                                    } else when (parsed.intent) {
-                                        RuleIntent.SIMPLE_CONTACT -> "⚡ Fast Contact (<0.2ms)"
-                                        RuleIntent.SIMPLE_BLOCK -> "🚫 Direct Block (<0.2ms)"
-                                        RuleIntent.CONDITIONAL_CONTACT -> "⚡ AOT Conditional (<0.2ms)"
-                                        RuleIntent.CONDITIONAL_EMOTION -> "🧠 K2 Deep AI (On-Demand)"
-                                        RuleIntent.TOPIC_FILTER -> "⚡ AOT Topic Filter (<0.2ms)"
-                                        RuleIntent.APP_FILTER -> "⚡ App Filter (<0.2ms)"
+                                    } else when (rule.ruleIntent) {
+                                        "SIMPLE_CONTACT" -> "⚡ Fast Contact (<0.2ms)"
+                                        "SIMPLE_BLOCK" -> "🚫 Direct Block (<0.2ms)"
+                                        "CONDITIONAL_CONTACT" -> "⚡ AOT Conditional (<0.2ms)"
+                                        "CONDITIONAL_EMOTION" -> "🧠 K2 Deep AI (On-Demand)"
+                                        "APP_FILTER" -> "⚡ App Filter (<0.2ms)"
+                                        else -> "⚡ AOT Topic Filter (<0.2ms)"
                                     },
                                     fontSize = 10.sp,
                                     fontWeight = FontWeight.Bold,
-                                    color = if (isDeepRule) {
+                                    color = if (rule.isCompiling) {
+                                        Color(0xFF0288D1)
+                                    } else if (isDeepRule) {
                                         Color(0xFFAB47BC)
-                                    } else when (parsed.intent) {
-                                        RuleIntent.SIMPLE_CONTACT -> Color(0xFF2E7D32)
-                                        RuleIntent.SIMPLE_BLOCK -> Color(0xFFD32F2F)
-                                        RuleIntent.CONDITIONAL_CONTACT -> Color(0xFF1976D2)
-                                        RuleIntent.CONDITIONAL_EMOTION -> Color(0xFFAB47BC)
-                                        RuleIntent.TOPIC_FILTER -> Color(0xFF7B1FA2)
-                                        RuleIntent.APP_FILTER -> Color(0xFFEF6C00)
+                                    } else when (rule.ruleIntent) {
+                                        "SIMPLE_CONTACT" -> Color(0xFF2E7D32)
+                                        "SIMPLE_BLOCK" -> Color(0xFFD32F2F)
+                                        "CONDITIONAL_CONTACT" -> Color(0xFF1976D2)
+                                        "CONDITIONAL_EMOTION" -> Color(0xFFAB47BC)
+                                        "APP_FILTER" -> Color(0xFFEF6C00)
+                                        else -> Color(0xFF7B1FA2)
                                     },
                                     modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                                 )

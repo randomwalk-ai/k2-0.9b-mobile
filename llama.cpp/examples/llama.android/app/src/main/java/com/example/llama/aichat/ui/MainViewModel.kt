@@ -9,7 +9,6 @@ import androidx.lifecycle.viewModelScope
 import com.example.llama.aichat.ai.K2InferenceManager
 import com.example.llama.aichat.ai.K2PromptBuilder
 import com.example.llama.aichat.ai.K2ResponseParser
-import com.example.llama.aichat.ai.RuleClassifier
 import com.example.llama.aichat.data.*
 import com.example.llama.aichat.notification.NotificationSummaryManager
 import kotlinx.coroutines.Dispatchers
@@ -166,22 +165,28 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun addRule(text: String) {
         viewModelScope.launch(Dispatchers.IO) {
-            val initialParsed = RuleClassifier.classify(text)
-            val insertedId = ruleRepo.insert(initialParsed.toNotificationRule())
-            compileRuleWithK2Async(insertedId, text)
+            val initialRule = NotificationRule(
+                text = text.trim(),
+                isCompiling = true
+            )
+            val insertedId = ruleRepo.insert(initialRule)
+            compileRuleWithK2(insertedId, text.trim())
         }
     }
 
     fun updateRule(rule: NotificationRule, newText: String) {
         viewModelScope.launch(Dispatchers.IO) {
-            val initialParsed = RuleClassifier.classify(newText)
-            val updated = initialParsed.toNotificationRule(id = rule.id, enabled = rule.enabled)
+            val updated = rule.copy(
+                text = newText.trim(),
+                isCompiling = true,
+                updatedAt = System.currentTimeMillis()
+            )
             ruleRepo.update(updated)
-            compileRuleWithK2Async(rule.id, newText)
+            compileRuleWithK2(rule.id, newText.trim())
         }
     }
 
-    private suspend fun compileRuleWithK2Async(ruleId: Long, rawText: String) {
+    private suspend fun compileRuleWithK2(ruleId: Long, rawText: String) {
         try {
             val inferenceManager = K2InferenceManager.getInstance(getApplication())
             val prompt = K2PromptBuilder.buildRuleCompilationPrompt(rawText)
@@ -191,13 +196,19 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 if (compiled != null) {
                     val existing = ruleRepo.getRuleById(ruleId)
                     val isEnabled = existing?.enabled ?: true
-                    val finalRule = compiled.toNotificationRule(id = ruleId, enabled = isEnabled)
+                    val finalRule = compiled.toNotificationRule(id = ruleId, enabled = isEnabled).copy(isCompiling = false)
                     ruleRepo.update(finalRule)
-                    Log.i("MainViewModel", "Rule #$ruleId successfully compiled via K2: intent=${finalRule.ruleIntent}, depth=${finalRule.semanticDepth}, apps=${finalRule.targetAppsJson}, topics=${finalRule.positiveTopicsJson}")
+                    Log.i("MainViewModel", "Rule #$ruleId compiled via K2: intent=${finalRule.ruleIntent}, depth=${finalRule.semanticDepth}, apps=${finalRule.targetAppsJson}, topics=${finalRule.positiveTopicsJson}")
+                    return
                 }
             }
         } catch (e: Exception) {
-            Log.w("MainViewModel", "K2 rule compilation exception (retaining fallback): ${e.message}")
+            Log.w("MainViewModel", "K2 rule compilation exception: ${e.message}")
+        }
+        // Fallback: clear compiling flag if model was not available
+        val existing = ruleRepo.getRuleById(ruleId)
+        if (existing != null && existing.isCompiling) {
+            ruleRepo.update(existing.copy(isCompiling = false))
         }
     }
 

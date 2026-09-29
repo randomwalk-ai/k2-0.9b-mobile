@@ -31,9 +31,10 @@ data class NotificationRule(
     val positiveTopicsJson: String = "[]",
     val excludedTopicsJson: String = "[]",
     val targetAppsJson: String = "[]",
-    val ruleIntent: String = "SIMPLE_CONTACT",
+    val ruleIntent: String = "TOPIC_FILTER",
     val semanticDepth: String = "AOT_FAST",
     val semanticCondition: String? = null,
+    val isCompiling: Boolean = false,
     val createdAt: Long = System.currentTimeMillis(),
     val updatedAt: Long = System.currentTimeMillis()
 ) {

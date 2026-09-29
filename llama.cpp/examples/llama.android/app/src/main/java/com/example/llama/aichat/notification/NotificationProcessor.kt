@@ -5,8 +5,6 @@ import android.util.Log
 import com.example.llama.aichat.ai.K2InferenceManager
 import com.example.llama.aichat.ai.K2PromptBuilder
 import com.example.llama.aichat.ai.K2ResponseParser
-import com.example.llama.aichat.ai.RuleClassifier
-import com.example.llama.aichat.ai.RuleIntent
 import com.example.llama.aichat.data.NotificationRecord
 import com.example.llama.aichat.data.NotificationRepository
 import com.example.llama.aichat.data.NotificationRule
@@ -290,11 +288,8 @@ class NotificationProcessor(
                             candidateDeepRule.text.lowercase().startsWith("block") ||
                             candidateDeepRule.text.lowercase().startsWith("mute")
 
-                    // Extract target emotion / tone keywords from rule
-                    val detectedTones = RuleClassifier.getEmotionTriggers(candidateDeepRule.text)
-                    val targetTones = if (detectedTones.isNotEmpty()) {
-                        detectedTones
-                    } else if (!candidateDeepRule.semanticCondition.isNullOrBlank()) {
+                    // Target tone condition compiled by K2
+                    val targetTones = if (!candidateDeepRule.semanticCondition.isNullOrBlank()) {
                         listOf(candidateDeepRule.semanticCondition)
                     } else {
                         emptyList()
