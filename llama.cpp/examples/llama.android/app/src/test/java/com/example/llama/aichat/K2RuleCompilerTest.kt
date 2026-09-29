@@ -180,7 +180,9 @@ class K2RuleCompilerTest {
     fun testMalformedK2ResponseGracefulFallback() {
         val garbageOutput = "Sorry, as an AI I cannot compile this rule"
         val parsed = K2ResponseParser.parseCompiledRule(garbageOutput, "any message from Madhu is important")
-        assertNull(parsed)
+        assertNotNull(parsed)
+        assertEquals("madhu", parsed.targetPerson)
+        assertEquals(RuleIntent.SIMPLE_CONTACT, parsed.intent)
     }
 
     @Test

@@ -107,6 +107,24 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 summaryManager.updateSummary(list)
             }
         }
+
+        // Lightweight DB sanitation for existing rules (runs instantly with 0 LLM latency)
+        viewModelScope.launch(Dispatchers.IO) {
+            val existing = ruleRepo.getAllRulesSync()
+            existing.forEach { rule ->
+                val parsed = K2ResponseParser.parseCompiledRule(null, rule.text)
+                val needsUpdate = (rule.targetPerson.isNullOrBlank() && parsed.targetPerson != null) ||
+                        (rule.getTargetApps().isEmpty() && parsed.targetApps.isNotEmpty()) ||
+                        (rule.getExcludedTopics().isEmpty() && parsed.excludedTopics.isNotEmpty()) ||
+                        (rule.semanticDepth != parsed.semanticDepth) ||
+                        rule.isCompiling
+                if (needsUpdate) {
+                    val updated = parsed.toNotificationRule(id = rule.id, enabled = rule.enabled).copy(isCompiling = false)
+                    ruleRepo.update(updated)
+                    Log.i("MainViewModel", "Sanitized existing rule #${rule.id} ('${rule.text}'): intent=${updated.ruleIntent}, person=${updated.targetPerson}, apps=${updated.targetAppsJson}, excluded=${updated.excludedTopicsJson}")
+                }
+            }
+        }
     }
 
     fun setRetentionPeriod(period: RetentionPeriod) {
@@ -165,10 +183,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun addRule(text: String) {
         viewModelScope.launch(Dispatchers.IO) {
-            val initialRule = NotificationRule(
-                text = text.trim(),
-                isCompiling = true
-            )
+            val initialParsed = K2ResponseParser.parseCompiledRule(null, text.trim())
+            val initialRule = initialParsed.toNotificationRule(id = 0L, enabled = true).copy(isCompiling = true)
             val insertedId = ruleRepo.insert(initialRule)
             compileRuleWithK2(insertedId, text.trim())
         }
@@ -176,8 +192,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun updateRule(rule: NotificationRule, newText: String) {
         viewModelScope.launch(Dispatchers.IO) {
-            val updated = rule.copy(
-                text = newText.trim(),
+            val initialParsed = K2ResponseParser.parseCompiledRule(null, newText.trim())
+            val updated = initialParsed.toNotificationRule(id = rule.id, enabled = rule.enabled).copy(
                 isCompiling = true,
                 updatedAt = System.currentTimeMillis()
             )
