@@ -119,7 +119,7 @@ class NotificationProcessor(
         // Exact match
         if (candidateClean == targetClean) return true
 
-        // Check word parts (e.g. "Arjun" in "Arjun_Vasireddy" or "Arjun Vasireddy")
+        // Check word parts (e.g. "Alice" in "Alice_Smith" or "Alice Smith")
         for (word in candidateWords) {
             val wordClean = word.replace("_", "")
             if (wordClean == targetClean || wordClean.startsWith(targetClean)) {
@@ -127,13 +127,13 @@ class NotificationProcessor(
             }
         }
 
-        // Prefix match (e.g. "arjun_vasireddy" starts with "arjun")
+        // Prefix match (e.g. "alice_smith" starts with "alice")
         val candidateNoUnderscore = candidateClean.replace("_", "")
         if (candidateNoUnderscore.startsWith(targetClean)) {
             return true
         }
 
-        // Substring match for longer specific targets (e.g. "krishnavardhan")
+        // Substring match for longer specific targets
         if (targetClean.length >= 6 && candidateClean.contains(targetClean)) {
             return true
         }
@@ -160,34 +160,13 @@ class NotificationProcessor(
     }
 
     private fun inferCategoryFromContent(contentLower: String, appNameLower: String, defaultCategory: String?): String {
-        val words = contentLower.split(Regex("[^a-zA-Z0-9_]+")).toSet()
         return when {
-            defaultCategory == "call" || contentLower.contains("missed call") -> "calls"
-
-            words.contains("interview") || words.contains("recruiter") || words.contains("hiring") ||
-            words.contains("p0") || words.contains("incident") || words.contains("slack") ||
-            words.contains("teams") || contentLower.contains("pull request") || words.contains("outage") ||
-            words.contains("downtime") || words.contains("pagerduty") -> "work"
-
-            words.contains("otp") || words.contains("debited") || words.contains("credited") ||
-            words.contains("debit") || words.contains("credit") || words.contains("atm") ||
-            words.contains("withdrawal") || words.contains("emi") || words.contains("account") ||
-            words.contains("upi") || words.contains("bank") || words.contains("refund") ||
-            words.contains("salary") || words.contains("phonepe") || words.contains("gpay") ||
-            words.contains("paytm") || words.contains("cred") || words.contains("balance") -> "banking"
-
-            words.contains("delivery") || words.contains("swiggy") || words.contains("zomato") ||
-            words.contains("blinkit") || words.contains("zepto") || words.contains("parcel") ||
-            words.contains("order") || words.contains("package") || words.contains("rider") ||
-            words.contains("doorstep") || contentLower.contains("out for delivery") -> "delivery"
-
-            words.contains("cab") || words.contains("uber") || words.contains("ola") ||
-            words.contains("flight") || words.contains("pnr") || words.contains("train") ||
-            words.contains("platform") || words.contains("boarding") -> "travel"
-
-            words.contains("whatsapp") || words.contains("instagram") || words.contains("telegram") ||
-            words.contains("message") || words.contains("chat") || defaultCategory == "msg" -> "messages"
-
+            defaultCategory == "call" || defaultCategory == "missed_call" || contentLower.contains("missed call") -> "calls"
+            defaultCategory == "msg" || defaultCategory == "message" || defaultCategory == "email" -> "messages"
+            defaultCategory == "promo" || defaultCategory == "recommendation" -> "promotions"
+            defaultCategory == "event" || defaultCategory == "alarm" || defaultCategory == "reminder" -> "reminders"
+            defaultCategory == "social" -> "social"
+            defaultCategory == "transport" -> "travel"
             else -> "other"
         }
     }
@@ -371,7 +350,7 @@ class NotificationProcessor(
                     // Evaluate sender match
                     val senderMatches = isPersonRule && isSenderMatch(targetPerson, data)
 
-                    // Case A: Person rule where sender does NOT match -> Skip (Prevents body mentions like "Hi madhu" by Arjun from triggering Madhu's rule)
+                    // Case A: Person rule where sender does NOT match -> Skip
                     if (isPersonRule && !senderMatches) {
                         continue
                     }
