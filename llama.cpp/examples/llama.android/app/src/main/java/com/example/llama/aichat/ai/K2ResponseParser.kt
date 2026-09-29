@@ -194,20 +194,37 @@ object K2ResponseParser {
             // Person
             val cleanPerson = rawPerson?.lowercase()?.trim()
 
+            val noiseTokens = setOf(
+                "msg", "msgs", "message", "messages", "notification", "notifications",
+                "text", "texts", "send", "sends", "sent", "sending", "talking", "messaged",
+                "someone", "anyone", "any", "one", "everything", "something",
+                "important", "alert", "alerts", "mute", "muted", "related", "about"
+            )
+
             // Topics from K2
             val cleanPositiveTopics = positiveTopicsList
                 .map { it.lowercase().trim() }
-                .filter { it.length >= 2 && it != cleanPerson && it !in targetApps }
+                .filter { it.length >= 2 && it != cleanPerson && it !in targetApps && it !in noiseTokens }
                 .toSet()
 
             val cleanExcludedTopics = excludedTopicsList
                 .map { it.lowercase().trim() }
-                .filter { it.length >= 2 && it != cleanPerson && it !in targetApps }
+                .filter { it.length >= 2 && it != cleanPerson && it !in targetApps && it !in noiseTokens }
                 .toSet()
+
+            val finalIntent = when {
+                intent == RuleIntent.CONDITIONAL_EMOTION || rawEngine == "K2_DEEP" -> RuleIntent.CONDITIONAL_EMOTION
+                cleanPerson != null && cleanPositiveTopics.isEmpty() && cleanExcludedTopics.isEmpty() && rawAction == "MUTE" -> RuleIntent.SIMPLE_BLOCK
+                cleanPerson != null && cleanPositiveTopics.isEmpty() && cleanExcludedTopics.isEmpty() -> RuleIntent.SIMPLE_CONTACT
+                cleanPerson != null -> RuleIntent.CONDITIONAL_CONTACT
+                targetApps.isNotEmpty() && cleanPositiveTopics.isEmpty() && cleanExcludedTopics.isEmpty() -> RuleIntent.APP_FILTER
+                targetApps.isNotEmpty() -> RuleIntent.APP_FILTER
+                else -> RuleIntent.TOPIC_FILTER
+            }
 
             ParsedRule(
                 rawText = rawRuleText,
-                intent = intent,
+                intent = finalIntent,
                 targetPerson = cleanPerson,
                 action = rawAction,
                 targetApps = targetApps,

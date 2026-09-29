@@ -8,6 +8,9 @@ interface NotificationRuleDao {
     @Query("SELECT * FROM notification_rules ORDER BY createdAt DESC")
     fun getAllRules(): Flow<List<NotificationRule>>
 
+    @Query("SELECT * FROM notification_rules")
+    suspend fun getAllRulesSync(): List<NotificationRule>
+
     @Query("SELECT * FROM notification_rules WHERE enabled = 1")
     suspend fun getEnabledRules(): List<NotificationRule>
 
