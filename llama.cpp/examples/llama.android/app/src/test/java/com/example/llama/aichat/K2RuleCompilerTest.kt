@@ -228,4 +228,50 @@ class K2RuleCompilerTest {
         assertFalse(happyToneResult.toneMatched)
         // Since suppression condition is FALSE, execution falls through to Rule 1 (Teams Alert) -> Alerts!
     }
+
+    @Test
+    fun testUserSpecificRulesCompilation() {
+        // 1. Madhu Rule: "if any msg from madhu it is important,if she sends reels it is not important"
+        val madhuRule = K2ResponseParser.parseCompiledRule(null, "if any msg from madhu it is important,if she sends reels it is not important")
+        assertEquals(RuleIntent.CONDITIONAL_CONTACT, madhuRule.intent)
+        assertEquals("madhu", madhuRule.targetPerson)
+        assertEquals("ALERT", madhuRule.action)
+        assertFalse(madhuRule.isNegative)
+        assertTrue(madhuRule.excludedTopics.contains("reels"))
+        assertTrue(madhuRule.positiveTopics.isEmpty())
+
+        // 2. Arjun Rule: "any msg from arjun related to job is important"
+        val arjunRule = K2ResponseParser.parseCompiledRule(null, "any msg from arjun related to job is important")
+        assertEquals(RuleIntent.CONDITIONAL_CONTACT, arjunRule.intent)
+        assertEquals("arjun", arjunRule.targetPerson)
+        assertEquals("ALERT", arjunRule.action)
+        assertFalse(arjunRule.isNegative)
+        assertTrue(arjunRule.positiveTopics.contains("job"))
+        assertTrue(arjunRule.excludedTopics.isEmpty())
+
+        // 3. Pranav Rule: "any message from pranav when he his angry it is not important"
+        val pranavRule = K2ResponseParser.parseCompiledRule(null, "any message from pranav when he his angry it is not important")
+        assertEquals(RuleIntent.CONDITIONAL_EMOTION, pranavRule.intent)
+        assertEquals("pranav", pranavRule.targetPerson)
+        assertEquals("MUTE", pranavRule.action)
+        assertTrue(pranavRule.isNegative)
+        assertEquals("K2_DEEP", pranavRule.semanticDepth)
+
+        // 4. Krishna Rule: "any msg from krishna it is important"
+        val krishnaRule = K2ResponseParser.parseCompiledRule(null, "any msg from krishna it is important")
+        assertEquals(RuleIntent.SIMPLE_CONTACT, krishnaRule.intent)
+        assertEquals("krishna", krishnaRule.targetPerson)
+        assertEquals("ALERT", krishnaRule.action)
+        assertFalse(krishnaRule.isNegative)
+        assertTrue(krishnaRule.positiveTopics.isEmpty())
+        assertTrue(krishnaRule.excludedTopics.isEmpty())
+
+        // 5. Cricket Rule: "anyone msges about playing cricket it is important"
+        val cricketRule = K2ResponseParser.parseCompiledRule(null, "anyone msges about playing cricket it is important")
+        assertEquals(RuleIntent.TOPIC_FILTER, cricketRule.intent)
+        assertNull(cricketRule.targetPerson)
+        assertEquals("ALERT", cricketRule.action)
+        assertFalse(cricketRule.isNegative)
+        assertTrue(cricketRule.positiveTopics.contains("cricket"))
+    }
 }

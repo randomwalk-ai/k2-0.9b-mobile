@@ -142,10 +142,7 @@ object K2ResponseParser {
 
             // 4. Extract action
             val actionRegex = Regex("\"action\"\\s*:\\s*\"([^\"]*)\"", RegexOption.IGNORE_CASE)
-            val rawAction = if (jsonCandidate.isNotEmpty()) actionRegex.find(jsonCandidate)?.groupValues?.get(1)?.uppercase()?.trim() ?: "ALERT" else {
-                val lower = rawRuleText.lowercase()
-                if ((lower.startsWith("ignore") || lower.startsWith("block") || lower.startsWith("mute") || lower.endsWith("not important") || lower.contains("is not important")) && !lower.contains("otherwise important")) "MUTE" else "ALERT"
-            }
+            val rawActionExtracted = if (jsonCandidate.isNotEmpty()) actionRegex.find(jsonCandidate)?.groupValues?.get(1)?.uppercase()?.trim() else null
 
             // 5. Extract semantic_condition
             val conditionRegex = Regex("\"semantic_condition\"\\s*:\\s*(\"([^\"]*)\"|null)", RegexOption.IGNORE_CASE)
@@ -156,24 +153,6 @@ object K2ResponseParser {
             val targetAppsList = if (jsonCandidate.isNotEmpty()) extractJsonStringArray(jsonCandidate, "target_apps") else emptyList()
             val positiveTopicsList = if (jsonCandidate.isNotEmpty()) extractJsonStringArray(jsonCandidate, "positive_topics") else emptyList()
             val excludedTopicsList = if (jsonCandidate.isNotEmpty()) extractJsonStringArray(jsonCandidate, "excluded_topics") else emptyList()
-
-            // Determine intent
-            val intent = when (rawRuleType) {
-                "APP_FILTER" -> RuleIntent.APP_FILTER
-                "TOPIC_FILTER" -> RuleIntent.TOPIC_FILTER
-                "SIMPLE_CONTACT" -> RuleIntent.SIMPLE_CONTACT
-                "SIMPLE_BLOCK" -> RuleIntent.SIMPLE_BLOCK
-                "CONDITIONAL_CONTACT" -> RuleIntent.CONDITIONAL_CONTACT
-                "CONDITIONAL_EMOTION" -> RuleIntent.CONDITIONAL_EMOTION
-                else -> when {
-                    rawEngine == "K2_DEEP" || rawCondition != null -> RuleIntent.CONDITIONAL_EMOTION
-                    rawPerson != null && rawAction == "MUTE" && positiveTopicsList.isEmpty() && excludedTopicsList.isEmpty() -> RuleIntent.SIMPLE_BLOCK
-                    rawPerson != null && (positiveTopicsList.isNotEmpty() || excludedTopicsList.isNotEmpty()) -> RuleIntent.CONDITIONAL_CONTACT
-                    rawPerson != null -> RuleIntent.SIMPLE_CONTACT
-                    targetAppsList.isNotEmpty() -> RuleIntent.APP_FILTER
-                    else -> RuleIntent.TOPIC_FILTER
-                }
-            }
 
             val noiseTokens = setOf(
                 "msg", "msgs", "message", "messages", "notification", "notifications",
@@ -202,14 +181,14 @@ object K2ResponseParser {
                 if (candidate != null && candidate !in nonPersonWords && candidate !in targetApps) candidate else null
             }
 
-            // Topics from K2
+            // Topics from K2 with dynamic NLP fallback
             val cleanPositiveTopics = (positiveTopicsList
                 .map { it.lowercase().trim() }
                 .filter { it.length >= 2 && it != cleanPerson && it !in targetApps && it !in noiseTokens }
                 .toSet()).toMutableSet()
 
             if (cleanPositiveTopics.isEmpty()) {
-                val matchRelated = Regex("(?:related to|about|playing)\\s+([a-zA-Z0-9_]+)", RegexOption.IGNORE_CASE).find(rawRuleText)
+                val matchRelated = Regex("(?:related to|about|for|regarding|discussing|playing)(?:\\s+(?:playing|having|doing|getting))?\\s+([a-zA-Z0-9_]+)", RegexOption.IGNORE_CASE).find(rawRuleText)
                 val topic = matchRelated?.groupValues?.get(1)?.lowercase()?.trim()
                 if (topic != null && topic.length >= 2 && topic !in noiseTokens && topic != cleanPerson && topic !in targetApps) {
                     cleanPositiveTopics.add(topic)
@@ -223,21 +202,41 @@ object K2ResponseParser {
 
             if (cleanExcludedTopics.isEmpty()) {
                 val lower = rawRuleText.lowercase()
+                val matchExcept = Regex("(?:except|unless|not|without|sends?)\\s+([a-zA-Z0-9_]+)", RegexOption.IGNORE_CASE).find(rawRuleText)
+                val candidateExcluded = matchExcept?.groupValues?.get(1)?.lowercase()?.trim()
+                if (candidateExcluded != null && candidateExcluded.length >= 2 && candidateExcluded !in noiseTokens && candidateExcluded != cleanPerson && candidateExcluded !in targetApps && candidateExcluded !in setOf("he", "she", "they", "his", "her", "their", "important", "alert")) {
+                    cleanExcludedTopics.add(candidateExcluded)
+                }
                 if (lower.contains("reels") || lower.contains("reel")) cleanExcludedTopics.addAll(listOf("reels", "reel", "video"))
                 if (lower.contains("memes") || lower.contains("meme")) cleanExcludedTopics.addAll(listOf("memes", "meme", "jokes"))
+                if (lower.contains("spam") || lower.contains("promo")) cleanExcludedTopics.addAll(listOf("spam", "promo", "offers", "deals"))
             }
 
-            val isInferredEmotion = rawEngine == "K2_DEEP" || intent == RuleIntent.CONDITIONAL_EMOTION ||
+            val lowerText = rawRuleText.lowercase()
+            val isInferredEmotion = rawEngine == "K2_DEEP" || rawRuleType == "CONDITIONAL_EMOTION" ||
                     Regex("\\b(angry|furious|mad|rage|upset|hostile)\\b", RegexOption.IGNORE_CASE).containsMatchIn(rawRuleText)
             val finalSemanticDepth = if (isInferredEmotion) "K2_DEEP" else "AOT_FAST"
             val finalSemanticCondition = rawCondition ?: if (isInferredEmotion) "sender is angry, mad, or furious" else null
 
+            val hasPositiveClause = (lowerText.contains("is important") || lowerText.contains("it is important") || lowerText.contains("are important") || lowerText.contains("alert")) &&
+                    !lowerText.startsWith("not important") && !lowerText.startsWith("never important")
+            val isExplicitNegative = lowerText.startsWith("ignore") || lowerText.startsWith("block") || lowerText.startsWith("mute") ||
+                    lowerText.contains("is not important") || lowerText.contains("never important") || lowerText.contains("not important")
+
+            val finalAction = when {
+                rawActionExtracted != null -> rawActionExtracted
+                isInferredEmotion && isExplicitNegative -> "MUTE"
+                cleanPerson != null && cleanExcludedTopics.isNotEmpty() && hasPositiveClause -> "ALERT"
+                isExplicitNegative && !hasPositiveClause -> "MUTE"
+                else -> "ALERT"
+            }
+
             val finalIntent = when {
                 isInferredEmotion -> RuleIntent.CONDITIONAL_EMOTION
-                rawRuleType == "SIMPLE_CONTACT" || (cleanPerson != null && cleanPositiveTopics.isEmpty() && cleanExcludedTopics.isEmpty() && rawAction != "MUTE") -> RuleIntent.SIMPLE_CONTACT
-                rawRuleType == "SIMPLE_BLOCK" || (cleanPerson != null && cleanPositiveTopics.isEmpty() && cleanExcludedTopics.isEmpty() && rawAction == "MUTE") -> RuleIntent.SIMPLE_BLOCK
-                rawRuleType == "CONDITIONAL_CONTACT" || (cleanPerson != null && (cleanPositiveTopics.isNotEmpty() || cleanExcludedTopics.isNotEmpty())) -> RuleIntent.CONDITIONAL_CONTACT
-                rawRuleType == "APP_FILTER" || targetApps.isNotEmpty() -> RuleIntent.APP_FILTER
+                cleanPerson != null && cleanPositiveTopics.isEmpty() && cleanExcludedTopics.isEmpty() && finalAction == "MUTE" -> RuleIntent.SIMPLE_BLOCK
+                cleanPerson != null && cleanPositiveTopics.isEmpty() && cleanExcludedTopics.isEmpty() -> RuleIntent.SIMPLE_CONTACT
+                cleanPerson != null && (cleanPositiveTopics.isNotEmpty() || cleanExcludedTopics.isNotEmpty()) -> RuleIntent.CONDITIONAL_CONTACT
+                rawRuleType == "APP_FILTER" || (targetApps.isNotEmpty() && cleanPerson == null && cleanPositiveTopics.isEmpty() && cleanExcludedTopics.isEmpty()) -> RuleIntent.APP_FILTER
                 cleanPerson != null -> RuleIntent.SIMPLE_CONTACT
                 else -> RuleIntent.TOPIC_FILTER
             }
@@ -246,11 +245,11 @@ object K2ResponseParser {
                 rawText = rawRuleText,
                 intent = finalIntent,
                 targetPerson = cleanPerson,
-                action = rawAction,
+                action = finalAction,
                 targetApps = targetApps,
                 positiveTopics = cleanPositiveTopics,
                 excludedTopics = cleanExcludedTopics,
-                isNegative = rawAction == "MUTE",
+                isNegative = finalAction == "MUTE",
                 semanticDepth = finalSemanticDepth,
                 semanticCondition = finalSemanticCondition
             )

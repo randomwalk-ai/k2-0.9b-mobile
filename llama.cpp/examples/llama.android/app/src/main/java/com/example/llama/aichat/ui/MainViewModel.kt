@@ -113,15 +113,18 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             val existing = ruleRepo.getAllRulesSync()
             existing.forEach { rule ->
                 val parsed = K2ResponseParser.parseCompiledRule(null, rule.text)
-                val needsUpdate = (rule.targetPerson.isNullOrBlank() && parsed.targetPerson != null) ||
-                        (rule.getTargetApps().isEmpty() && parsed.targetApps.isNotEmpty()) ||
-                        (rule.getExcludedTopics().isEmpty() && parsed.excludedTopics.isNotEmpty()) ||
+                val needsUpdate = (rule.targetPerson != parsed.targetPerson) ||
+                        (rule.getTargetApps().toSet() != parsed.targetApps) ||
+                        (rule.getPositiveTopics().toSet() != parsed.positiveTopics) ||
+                        (rule.getExcludedTopics().toSet() != parsed.excludedTopics) ||
                         (rule.semanticDepth != parsed.semanticDepth) ||
+                        (rule.ruleIntent != parsed.intent.name) ||
+                        (rule.action != parsed.action) ||
                         rule.isCompiling
                 if (needsUpdate) {
                     val updated = parsed.toNotificationRule(id = rule.id, enabled = rule.enabled).copy(isCompiling = false)
                     ruleRepo.update(updated)
-                    Log.i("MainViewModel", "Sanitized existing rule #${rule.id} ('${rule.text}'): intent=${updated.ruleIntent}, person=${updated.targetPerson}, apps=${updated.targetAppsJson}, excluded=${updated.excludedTopicsJson}")
+                    Log.i("MainViewModel", "Sanitized existing rule #${rule.id} ('${rule.text}'): intent=${updated.ruleIntent}, person=${updated.targetPerson}, action=${updated.action}, topics=${updated.positiveTopicsJson}, excluded=${updated.excludedTopicsJson}")
                 }
             }
         }
