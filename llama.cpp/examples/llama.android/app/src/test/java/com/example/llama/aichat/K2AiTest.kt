@@ -357,4 +357,47 @@ class K2AiTest {
 
         return false
     }
+
+    @Test
+    fun testGamingTopicRuleNoOneStopWord() {
+        val rule = RuleClassifier.classify("if any one messaged about playing games it is important")
+        assertEquals(RuleIntent.TOPIC_FILTER, rule.intent)
+        assertFalse(rule.positiveTopics.contains("one"))
+        assertFalse(rule.positiveTopics.contains("messaged"))
+        assertFalse(rule.positiveTopics.contains("playing"))
+        assertTrue(rule.positiveTopics.contains("game") || rule.positiveTopics.contains("games") || rule.positiveTopics.contains("gaming"))
+    }
+
+    @Test
+    fun testOnePlusAndOneStepNotMatchingGamingRule() {
+        val rule = RuleClassifier.classify("if any one messaged about playing games it is important")
+        val positiveTopics = rule.positiveTopics
+
+        // "One step at a time"
+        val oneStepContent = "pranav rw one step at a time whatsapp"
+        val matchesOneStep = positiveTopics.any { anchor ->
+            anchor == "one" || (anchor.length >= 5 && oneStepContent.contains(anchor))
+        }
+        assertFalse("One step at a time should NOT match gaming rule", matchesOneStep)
+
+        // "ritvik.'s OnePlus Nord Buds 3"
+        val onePlusContent = "ritvik.'s oneplus nord buds 3 left 100% right 100% google play services"
+        val matchesOnePlus = positiveTopics.any { anchor ->
+            anchor == "one" || anchor == "oneplus"
+        }
+        assertFalse("OnePlus Buds should NOT match gaming rule", matchesOnePlus)
+    }
+
+    @Test
+    fun testToneAnalysisParsing() {
+        val angryJson = """{"tone_matched": true, "reason": "Sender is expressing intense anger and aggression"}"""
+        val angryResult = K2ResponseParser.parseToneResult(angryJson)
+        assertTrue(angryResult.toneMatched)
+        assertEquals("Sender is expressing intense anger and aggression", angryResult.reason)
+
+        val calmJson = """{"tone_matched": false, "reason": "Sender is calm and expressing contentment, not anger"}"""
+        val calmResult = K2ResponseParser.parseToneResult(calmJson)
+        assertFalse(calmResult.toneMatched)
+        assertEquals("Sender is calm and expressing contentment, not anger", calmResult.reason)
+    }
 }

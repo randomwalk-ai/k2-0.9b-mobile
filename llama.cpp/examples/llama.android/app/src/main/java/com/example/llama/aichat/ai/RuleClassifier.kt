@@ -43,17 +43,25 @@ data class ParsedRule(
 object RuleClassifier {
 
     private val FUNCTIONAL_STOP_WORDS = setOf(
-        "whatever", "messages", "message", "from", "any", "all", "every", "is", "are",
+        "whatever", "messages", "message", "messaged", "messaging", "from", "any", "all", "every", "is", "are", "was", "were", "been",
         "important", "alert", "priority", "urgent", "on", "in", "notification",
         "notifications", "to", "the", "and", "with", "for", "msg", "msgs",
-        "sent", "by", "its", "it's", "it", "someone", "anyone", "everyone",
-        "please", "be", "never", "not", "dont", "do", "ignore", "block", "blocked",
-        "calls", "call", "text", "texts", "about", "related", "relating", "regarding",
-        "if", "only", "when", "then", "which", "that", "this", "there", "their",
-        "should", "would", "could", "must", "of", "an", "a", "or", "as", "me", "my",
-        "tell", "notify", "update", "updates", "get", "give", "send", "sends", "share", "shares",
-        "he", "she", "they", "him", "her",
-        "app", "apps", "application", "applications", "channel", "channels", "group", "groups", "chat", "chats", "dm", "dms"
+        "sent", "sending", "sends", "by", "its", "it's", "it", "someone", "anyone", "everyone", "one", "ones", "nobody", "noone",
+        "everything", "anything", "something", "nothing",
+        "please", "be", "never", "not", "dont", "do", "does", "did", "ignore", "block", "blocked", "blocking", "mute", "muted", "muting",
+        "calls", "call", "calling", "called", "text", "texts", "texting", "texted", "about", "related", "relating", "regarding", "concerns", "concerning",
+        "if", "only", "when", "then", "which", "that", "this", "there", "their", "these", "those",
+        "should", "would", "could", "must", "of", "an", "a", "or", "as", "me", "my", "mine", "you", "your", "yours", "us", "our", "ours",
+        "tell", "telling", "told", "tells", "notify", "notifying", "notified", "notifies", "update", "updates", "updating", "updated",
+        "get", "gets", "getting", "got", "give", "gives", "giving", "given", "gave",
+        "send", "sends", "sending", "sent", "share", "shares", "sharing", "shared",
+        "talk", "talks", "talking", "talked", "say", "says", "saying", "said",
+        "play", "plays", "playing", "played",
+        "he", "she", "they", "him", "her", "them", "his", "hers", "their", "theirs",
+        "app", "apps", "application", "applications", "channel", "channels", "group", "groups", "chat", "chats", "chatting", "chatted", "dm", "dms",
+        "like", "likes", "liking", "liked", "post", "posts", "posting", "posted", "content", "contents", "detail", "details", "info", "information",
+        "matter", "matters", "topic", "topics", "subject", "subjects", "thing", "things", "stuff",
+        "guy", "guys", "person", "people", "man", "bro", "dude", "time", "times", "step", "steps"
     )
 
     // Comprehensive Domain Semantic Knowledge Graph for Ahead-Of-Time (AOT) Synonym Expansion

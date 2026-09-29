@@ -145,12 +145,18 @@ class AotRuleEngine1000Test {
 
     private fun textMatchesDynamicAnchor(content: String, anchor: String): Boolean {
         val cleanAnchor = anchor.trim().lowercase()
-        if (cleanAnchor.length < 3) return false
+        if (cleanAnchor.length < 2) return false
+
+        if (cleanAnchor.contains(" ")) {
+            return content.contains(cleanAnchor)
+        }
+
         val words = content.split(Regex("[^a-zA-Z0-9_]+")).filter { it.length >= 2 }
         return words.any { word ->
             word == cleanAnchor ||
-            (word.length >= 4 && word.startsWith(cleanAnchor)) ||
-            (cleanAnchor.contains(" ") && content.contains(cleanAnchor))
+            word == "${cleanAnchor}s" ||
+            "${word}s" == cleanAnchor ||
+            (cleanAnchor.length >= 5 && word.startsWith(cleanAnchor) && word.length <= cleanAnchor.length + 3)
         }
     }
 
