@@ -273,5 +273,27 @@ class K2RuleCompilerTest {
         assertEquals("ALERT", cricketRule.action)
         assertFalse(cricketRule.isNegative)
         assertTrue(cricketRule.positiveTopics.contains("cricket"))
+
+        // 6. Call Rule: "if pranav calls me it is important"
+        val pranavCallRule = K2ResponseParser.parseCompiledRule(null, "if pranav calls me it is important")
+        assertEquals(RuleIntent.SIMPLE_CONTACT, pranavCallRule.intent)
+        assertEquals("pranav", pranavCallRule.targetPerson)
+        assertEquals("ALERT", pranavCallRule.action)
+        assertFalse(pranavCallRule.isNegative)
+
+        // 7. Test Caller / Missed Call Matching on Phone
+        val missedCallData = NotificationData(
+            packageName = "com.samsung.android.incallui",
+            appName = "Phone",
+            title = "Missed call",
+            text = "Pranav Rw",
+            subText = null,
+            sender = null,
+            category = "missed_call",
+            notificationKey = "call_key_1",
+            timestamp = System.currentTimeMillis()
+        )
+        // Verify target person "pranav" matches caller "Pranav Rw"
+        assertTrue(com.example.llama.aichat.notification.NotificationProcessor.isSenderMatch("pranav", missedCallData))
     }
 }

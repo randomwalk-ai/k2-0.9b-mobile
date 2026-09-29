@@ -231,7 +231,8 @@ object K2ResponseParser {
                 "msg", "msgs", "message", "messages", "notification", "notifications",
                 "text", "texts", "send", "sends", "sent", "sending", "talking", "messaged",
                 "someone", "anyone", "any", "one", "everything", "something",
-                "important", "alert", "alerts", "mute", "muted", "related", "about"
+                "important", "alert", "alerts", "mute", "muted", "related", "about",
+                "calls", "calling", "call", "me", "him", "her", "them", "us"
             )
 
             // Target Apps with fallback
@@ -246,12 +247,30 @@ object K2ResponseParser {
                 if (lower.contains("uber")) targetApps.add("uber")
             }
 
-            // Target Person with fallback
+            // Target Person with dynamic NLP fallback
             val cleanPerson = rawPerson?.lowercase()?.trim() ?: run {
-                val fromMatch = Regex("from\\s+([a-zA-Z0-9_]+)", RegexOption.IGNORE_CASE).find(rawRuleText)
-                val candidate = fromMatch?.groupValues?.get(1)?.lowercase()?.trim()
-                val nonPersonWords = setOf("teams", "slack", "whatsapp", "swiggy", "uber", "instagram", "any", "anyone", "someone")
-                if (candidate != null && candidate !in nonPersonWords && candidate !in targetApps) candidate else null
+                val nonPersonWords = setOf(
+                    "teams", "slack", "whatsapp", "swiggy", "uber", "instagram", "phone", "email", "gmail",
+                    "any", "anyone", "someone", "one", "all", "everything", "nobody", "noone",
+                    "if", "when", "whenever", "wherever", "whatever", "every", "a", "an", "the",
+                    "calls", "call", "calling", "msg", "msgs", "message", "messages", "text", "texts",
+                    "me", "my", "mine", "us", "our", "him", "her", "them", "it", "this", "that"
+                )
+
+                val personPatterns = listOf(
+                    Regex("(?:from|by)\\s+([a-zA-Z0-9_]+)", RegexOption.IGNORE_CASE),
+                    Regex("(?:if|when|whenever)\\s+([a-zA-Z0-9_]+)\\s+(?:calls?|texts?|messages?|msgs?|sends?|pings?|rings?)", RegexOption.IGNORE_CASE),
+                    Regex("^([a-zA-Z0-9_]+)\\s+(?:calls?|texts?|messages?|msgs?|sends?|pings?|rings?)", RegexOption.IGNORE_CASE),
+                    Regex("(?:when|if|whenever)\\s+([a-zA-Z0-9_]+)\\s+(?:is|his|feels|sounds)", RegexOption.IGNORE_CASE)
+                )
+
+                personPatterns.firstNotNullOfOrNull { pattern ->
+                    val match = pattern.find(rawRuleText)
+                    val candidate = match?.groupValues?.get(1)?.lowercase()?.trim()
+                    if (candidate != null && candidate.length >= 2 && candidate !in nonPersonWords && candidate !in targetApps) {
+                        candidate
+                    } else null
+                }
             }
 
             // Topics from K2 with dynamic NLP fallback

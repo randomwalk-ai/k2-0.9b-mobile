@@ -75,93 +75,112 @@ class NotificationProcessor(
         queue.trySend(data)
     }
 
-    fun isSenderMatch(ruleTarget: String?, data: NotificationData): Boolean {
-        if (ruleTarget.isNullOrBlank()) return false
+    companion object {
+        fun isSenderMatch(ruleTarget: String?, data: NotificationData): Boolean {
+            if (ruleTarget.isNullOrBlank()) return false
 
-        // 1. Direct sender from MessagingStyle (e.g. "Arjun_Vasireddy", "Madhu")
-        if (!data.sender.isNullOrBlank() && !data.sender.equals(data.appName, ignoreCase = true)) {
-            if (matchesPersonName(ruleTarget, data.sender)) {
-                return true
-            }
-        }
-
-        // 2. Notification title for 1-on-1 chats, SMS, or Phone / Missed Calls
-        if (!data.title.isNullOrBlank() && !data.title.equals(data.appName, ignoreCase = true)) {
-            if (matchesPersonName(ruleTarget, data.title)) {
-                return true
-            }
-        }
-
-        // 3. Sender prefix in text for group messages (e.g. "Madhu: Hi everyone")
-        val text = data.text?.trim()
-        if (!text.isNullOrBlank() && text.contains(":")) {
-            val possiblePrefix = text.substringBefore(":").trim()
-            if (possiblePrefix.length in 2..30 && !possiblePrefix.contains("\n") && !possiblePrefix.contains(".")) {
-                if (matchesPersonName(ruleTarget, possiblePrefix)) {
+            // 1. Direct sender from MessagingStyle (e.g. "Arjun_Vasireddy", "Madhu")
+            if (!data.sender.isNullOrBlank() && !data.sender.equals(data.appName, ignoreCase = true)) {
+                if (matchesPersonName(ruleTarget, data.sender)) {
                     return true
                 }
             }
+
+            // 2. Notification title for 1-on-1 chats, SMS, or Phone / Missed Calls
+            if (!data.title.isNullOrBlank() && !data.title.equals(data.appName, ignoreCase = true)) {
+                if (matchesPersonName(ruleTarget, data.title)) {
+                    return true
+                }
+            }
+
+            // 3. Notification text for calls, missed calls, SMS, or direct contact mentions
+            val text = data.text?.trim()
+            if (!text.isNullOrBlank() && !text.equals(data.appName, ignoreCase = true)) {
+                val isCallEvent = data.category == "call" || data.category == "missed_call" ||
+                        data.title?.contains("call", ignoreCase = true) == true ||
+                        data.title?.contains("missed", ignoreCase = true) == true ||
+                        data.appName.equals("Phone", ignoreCase = true) ||
+                        data.packageName.contains("dialer", ignoreCase = true) ||
+                        data.packageName.contains("incallui", ignoreCase = true) ||
+                        data.packageName.contains("telecom", ignoreCase = true)
+
+                if (isCallEvent || (text.length in 2..40 && !text.contains("\n") && !text.contains("."))) {
+                    if (matchesPersonName(ruleTarget, text)) {
+                        return true
+                    }
+                }
+
+                // Sender prefix in text for group messages (e.g. "Madhu: Hi everyone")
+                if (text.contains(":")) {
+                    val possiblePrefix = text.substringBefore(":").trim()
+                    if (possiblePrefix.length in 2..30 && !possiblePrefix.contains("\n") && !possiblePrefix.contains(".")) {
+                        if (matchesPersonName(ruleTarget, possiblePrefix)) {
+                            return true
+                        }
+                    }
+                }
+            }
+
+            return false
         }
 
-        return false
-    }
+        fun matchesPersonName(ruleTarget: String?, candidateName: String?): Boolean {
+            if (ruleTarget.isNullOrBlank() || candidateName.isNullOrBlank()) return false
+            val target = ruleTarget.lowercase().trim()
+            val targetClean = target.replace(" ", "")
+            val candidate = candidateName.lowercase().trim()
+            val candidateClean = candidate.replace(" ", "")
+            val candidateWords = candidate.split(Regex("[^a-zA-Z0-9_]+")).filter { it.length >= 2 }
 
-    fun matchesPersonName(ruleTarget: String?, candidateName: String?): Boolean {
-        if (ruleTarget.isNullOrBlank() || candidateName.isNullOrBlank()) return false
-        val target = ruleTarget.lowercase().trim()
-        val targetClean = target.replace(" ", "")
-        val candidate = candidateName.lowercase().trim()
-        val candidateClean = candidate.replace(" ", "")
-        val candidateWords = candidate.split(Regex("[^a-zA-Z0-9_]+")).filter { it.length >= 2 }
+            if (target.isEmpty() || candidate.isEmpty()) return false
 
-        if (target.isEmpty() || candidate.isEmpty()) return false
+            // Exact match
+            if (candidateClean == targetClean) return true
 
-        // Exact match
-        if (candidateClean == targetClean) return true
+            // Check word parts (e.g. "Alice" in "Alice_Smith" or "Alice Smith")
+            for (word in candidateWords) {
+                val wordClean = word.replace("_", "")
+                if (wordClean == targetClean || wordClean.startsWith(targetClean)) {
+                    return true
+                }
+            }
 
-        // Check word parts (e.g. "Alice" in "Alice_Smith" or "Alice Smith")
-        for (word in candidateWords) {
-            val wordClean = word.replace("_", "")
-            if (wordClean == targetClean || wordClean.startsWith(targetClean)) {
+            // Prefix match (e.g. "alice_smith" starts with "alice")
+            val candidateNoUnderscore = candidateClean.replace("_", "")
+            if (candidateNoUnderscore.startsWith(targetClean)) {
                 return true
             }
+
+            // Substring match for longer specific targets
+            if (targetClean.length >= 6 && candidateClean.contains(targetClean)) {
+                return true
+            }
+
+            return false
         }
 
-        // Prefix match (e.g. "alice_smith" starts with "alice")
-        val candidateNoUnderscore = candidateClean.replace("_", "")
-        if (candidateNoUnderscore.startsWith(targetClean)) {
-            return true
-        }
+        fun textMatchesDynamicAnchor(content: String, anchor: String): Boolean {
+            val cleanAnchor = anchor.trim().lowercase()
+            if (cleanAnchor.length < 2) return false
 
-        // Substring match for longer specific targets
-        if (targetClean.length >= 6 && candidateClean.contains(targetClean)) {
-            return true
-        }
+            // Multi-word phrase matching (e.g. "out for delivery", "offer letter", "play station")
+            if (cleanAnchor.contains(" ")) {
+                return content.contains(cleanAnchor)
+            }
 
-        return false
-    }
-
-    fun textMatchesDynamicAnchor(content: String, anchor: String): Boolean {
-        val cleanAnchor = anchor.trim().lowercase()
-        if (cleanAnchor.length < 2) return false
-
-        // Multi-word phrase matching (e.g. "out for delivery", "offer letter", "play station")
-        if (cleanAnchor.contains(" ")) {
-            return content.contains(cleanAnchor)
-        }
-
-        val words = content.split(Regex("[^a-zA-Z0-9_]+")).filter { it.length >= 2 }
-        return words.any { word ->
-            word == cleanAnchor ||
-            word == "${cleanAnchor}s" ||
-            "${word}s" == cleanAnchor ||
-            (cleanAnchor.length >= 5 && word.startsWith(cleanAnchor) && word.length <= cleanAnchor.length + 3)
+            val words = content.split(Regex("[^a-zA-Z0-9_]+")).filter { it.length >= 2 }
+            return words.any { word ->
+                word == cleanAnchor ||
+                word == "${cleanAnchor}s" ||
+                "${word}s" == cleanAnchor ||
+                (cleanAnchor.length >= 5 && word.startsWith(cleanAnchor) && word.length <= cleanAnchor.length + 3)
+            }
         }
     }
 
     private fun inferCategoryFromContent(contentLower: String, appNameLower: String, defaultCategory: String?): String {
         return when {
-            defaultCategory == "call" || defaultCategory == "missed_call" || contentLower.contains("missed call") -> "calls"
+            defaultCategory == "call" || defaultCategory == "missed_call" || contentLower.contains("missed call") || contentLower.contains("incoming call") || appNameLower == "phone" -> "calls"
             defaultCategory == "msg" || defaultCategory == "message" || defaultCategory == "email" -> "messages"
             defaultCategory == "promo" || defaultCategory == "recommendation" -> "promotions"
             defaultCategory == "event" || defaultCategory == "alarm" || defaultCategory == "reminder" -> "reminders"
