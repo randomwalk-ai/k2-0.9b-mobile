@@ -182,5 +182,24 @@ class K2AiTest {
         val calmResult = K2ResponseParser.parseToneResult(calmJson)
         assertFalse(calmResult.toneMatched)
         assertEquals("Sender is calm and expressing contentment, not anger", calmResult.reason)
+
+        // Quoted string boolean: "tone_matched": "true"
+        val quotedAngry = """{"tone_matched": "true", "reason": "Sender expresses hostility and anger, indicating genuine emotional tone of anger."}"""
+        val quotedAngryResult = K2ResponseParser.parseToneResult(quotedAngry)
+        assertTrue(quotedAngryResult.toneMatched)
+
+        // Quoted string boolean: "tone_matched": "false"
+        val quotedCalm = """{"tone_matched": "false", "reason": "Sender is calm and happy"}"""
+        val quotedCalmResult = K2ResponseParser.parseToneResult(quotedCalm)
+        assertFalse(quotedCalmResult.toneMatched)
+
+        // Fallback from reason when boolean key is omitted or malformed
+        val reasonOnlyAngry = """{"reason": "Sender expresses hostility and anger, indicating genuine emotional tone of anger."}"""
+        val reasonOnlyAngryResult = K2ResponseParser.parseToneResult(reasonOnlyAngry)
+        assertTrue(reasonOnlyAngryResult.toneMatched)
+
+        val reasonOnlyCalm = """{"reason": "Sender is expressing positive sentiment ('very pleased') which does not match the target emotional tone of anger, madness, or fury."}"""
+        val reasonOnlyCalmResult = K2ResponseParser.parseToneResult(reasonOnlyCalm)
+        assertFalse(reasonOnlyCalmResult.toneMatched)
     }
 }

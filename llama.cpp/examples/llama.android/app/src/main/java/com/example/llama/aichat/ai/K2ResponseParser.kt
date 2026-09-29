@@ -14,19 +14,32 @@ object K2ResponseParser {
         if (rawResponse.isNullOrBlank()) return fallback(defaultSummary)
 
         val text = rawResponse.trim()
+        val jsonCandidate = if (text.startsWith("{")) text else if (text.isNotEmpty()) "{$text" else ""
 
-        // Extract values via robust regex
-        val importantRegex = Regex("\"important\"\\s*:\\s*(true|false)", RegexOption.IGNORE_CASE)
-        val alertRegex = Regex("\"alert\"\\s*:\\s*(true|false)", RegexOption.IGNORE_CASE)
+        // Extract values via robust regex supporting quoted/unquoted and yes/no
+        val importantRegex = Regex("\"important\"\\s*:\\s*\"?(true|false|yes|no)\"?", RegexOption.IGNORE_CASE)
+        val alertRegex = Regex("\"alert\"\\s*:\\s*\"?(true|false|yes|no)\"?", RegexOption.IGNORE_CASE)
         val reasonRegex = Regex("\"reason\"\\s*:\\s*\"([^\"]*)\"", RegexOption.IGNORE_CASE)
         val summaryRegex = Regex("\"summary\"\\s*:\\s*\"([^\"]*)\"", RegexOption.IGNORE_CASE)
         val categoryRegex = Regex("\"category\"\\s*:\\s*\"([^\"]*)\"", RegexOption.IGNORE_CASE)
 
-        val importantMatch = importantRegex.find(text)?.groupValues?.get(1)?.toBooleanStrictOrNull()
-        val alertMatch = alertRegex.find(text)?.groupValues?.get(1)?.toBooleanStrictOrNull()
-        val reasonMatch = reasonRegex.find(text)?.groupValues?.get(1)
-        val summaryMatch = summaryRegex.find(text)?.groupValues?.get(1)
-        val categoryMatch = categoryRegex.find(text)?.groupValues?.get(1)
+        val importantStr = importantRegex.find(jsonCandidate)?.groupValues?.get(1)
+        val alertStr = alertRegex.find(jsonCandidate)?.groupValues?.get(1)
+        val reasonMatch = reasonRegex.find(jsonCandidate)?.groupValues?.get(1)
+        val summaryMatch = summaryRegex.find(jsonCandidate)?.groupValues?.get(1)
+        val categoryMatch = categoryRegex.find(jsonCandidate)?.groupValues?.get(1)
+
+        val importantMatch = when (importantStr?.lowercase()) {
+            "true", "yes" -> true
+            "false", "no" -> false
+            else -> null
+        }
+
+        val alertMatch = when (alertStr?.lowercase()) {
+            "true", "yes" -> true
+            "false", "no" -> false
+            else -> null
+        }
 
         val rawImportant = importantMatch ?: when {
             text.startsWith("true", ignoreCase = true) -> true
@@ -69,23 +82,62 @@ object K2ResponseParser {
             return ToneAnalysisResult(toneMatched = false, reason = "Model unavailable")
         }
         val text = rawResponse.trim()
-        val toneRegex = Regex("\"tone_matched\"\\s*:\\s*(true|false)", RegexOption.IGNORE_CASE)
-        val condRegex = Regex("\"condition_matched\"\\s*:\\s*(true|false)", RegexOption.IGNORE_CASE)
-        val isAngryRegex = Regex("\"is_angry\"\\s*:\\s*(true|false)", RegexOption.IGNORE_CASE)
-        val matchedRegex = Regex("\"matched\"\\s*:\\s*(true|false)", RegexOption.IGNORE_CASE)
+        val jsonCandidate = if (text.startsWith("{")) text else if (text.isNotEmpty()) "{$text" else ""
+
+        val toneRegex = Regex("\"tone_matched\"\\s*:\\s*\"?(true|false|yes|no)\"?", RegexOption.IGNORE_CASE)
+        val condRegex = Regex("\"condition_matched\"\\s*:\\s*\"?(true|false|yes|no)\"?", RegexOption.IGNORE_CASE)
+        val isAngryRegex = Regex("\"is_angry\"\\s*:\\s*\"?(true|false|yes|no)\"?", RegexOption.IGNORE_CASE)
+        val matchedRegex = Regex("\"matched\"\\s*:\\s*\"?(true|false|yes|no)\"?", RegexOption.IGNORE_CASE)
         val reasonRegex = Regex("\"reason\"\\s*:\\s*\"([^\"]*)\"", RegexOption.IGNORE_CASE)
 
-        val matched = toneRegex.find(text)?.groupValues?.get(1)?.toBooleanStrictOrNull()
-            ?: condRegex.find(text)?.groupValues?.get(1)?.toBooleanStrictOrNull()
-            ?: isAngryRegex.find(text)?.groupValues?.get(1)?.toBooleanStrictOrNull()
-            ?: matchedRegex.find(text)?.groupValues?.get(1)?.toBooleanStrictOrNull()
-            ?: when {
+        val rawMatchedStr = toneRegex.find(jsonCandidate)?.groupValues?.get(1)
+            ?: condRegex.find(jsonCandidate)?.groupValues?.get(1)
+            ?: isAngryRegex.find(jsonCandidate)?.groupValues?.get(1)
+            ?: matchedRegex.find(jsonCandidate)?.groupValues?.get(1)
+
+        val rawReason = reasonRegex.find(jsonCandidate)?.groupValues?.get(1)?.trim()
+
+        val parsedFromKey = when (rawMatchedStr?.lowercase()) {
+            "true", "yes" -> true
+            "false", "no" -> false
+            else -> null
+        }
+
+        // Semantic reason fallback if the JSON boolean key was missing, malformed, or inverted
+        val matched = if (parsedFromKey != null) {
+            parsedFromKey
+        } else if (!rawReason.isNullOrBlank()) {
+            val lowerReason = rawReason.lowercase()
+            val isExplicitNegation = lowerReason.contains("does not match") ||
+                    lowerReason.contains("not match") ||
+                    lowerReason.contains("not expressing") ||
+                    lowerReason.contains("not angry") ||
+                    lowerReason.contains("calm") ||
+                    lowerReason.contains("positive sentiment") ||
+                    lowerReason.contains("neutral") ||
+                    lowerReason.contains("no anger") ||
+                    lowerReason.contains("friendly")
+            val isExplicitPositive = lowerReason.contains("genuine emotional tone") ||
+                    lowerReason.contains("target emotional tone detected") ||
+                    lowerReason.contains("matches target tone") ||
+                    lowerReason.contains("hostility") ||
+                    lowerReason.contains("anger") ||
+                    lowerReason.contains("furious") ||
+                    lowerReason.contains("mad") ||
+                    lowerReason.contains("rage") ||
+                    lowerReason.contains("upset") ||
+                    lowerReason.contains("expresses") ||
+                    lowerReason.contains("indicating")
+            if (isExplicitNegation) false else isExplicitPositive
+        } else {
+            when {
                 text.startsWith("true", ignoreCase = true) -> true
                 text.startsWith("false", ignoreCase = true) -> false
                 else -> false
             }
+        }
 
-        val reason = reasonRegex.find(text)?.groupValues?.get(1)?.ifBlank { null }
+        val reason = rawReason?.ifBlank { null }
             ?: if (matched) "Target emotional tone detected" else "Target emotional tone not detected"
 
         return ToneAnalysisResult(
@@ -99,21 +151,42 @@ object K2ResponseParser {
             return SemanticConditionResult(conditionMatched = false, reason = "Model unavailable", category = "other")
         }
         val text = rawResponse.trim()
-        val conditionRegex = Regex("\"condition_matched\"\\s*:\\s*(true|false)", RegexOption.IGNORE_CASE)
-        val importantRegex = Regex("\"important\"\\s*:\\s*(true|false)", RegexOption.IGNORE_CASE)
+        val jsonCandidate = if (text.startsWith("{")) text else if (text.isNotEmpty()) "{$text" else ""
+
+        val conditionRegex = Regex("\"condition_matched\"\\s*:\\s*\"?(true|false|yes|no)\"?", RegexOption.IGNORE_CASE)
+        val importantRegex = Regex("\"important\"\\s*:\\s*\"?(true|false|yes|no)\"?", RegexOption.IGNORE_CASE)
         val reasonRegex = Regex("\"reason\"\\s*:\\s*\"([^\"]*)\"", RegexOption.IGNORE_CASE)
         val categoryRegex = Regex("\"category\"\\s*:\\s*\"([^\"]*)\"", RegexOption.IGNORE_CASE)
 
-        val condMatch = conditionRegex.find(text)?.groupValues?.get(1)?.toBooleanStrictOrNull()
-            ?: importantRegex.find(text)?.groupValues?.get(1)?.toBooleanStrictOrNull()
-            ?: when {
+        val rawCondStr = conditionRegex.find(jsonCandidate)?.groupValues?.get(1)
+            ?: importantRegex.find(jsonCandidate)?.groupValues?.get(1)
+
+        val rawReason = reasonRegex.find(jsonCandidate)?.groupValues?.get(1)?.trim()
+
+        val parsedFromKey = when (rawCondStr?.lowercase()) {
+            "true", "yes" -> true
+            "false", "no" -> false
+            else -> null
+        }
+
+        val condMatch = if (parsedFromKey != null) {
+            parsedFromKey
+        } else if (!rawReason.isNullOrBlank()) {
+            val lowerReason = rawReason.lowercase()
+            val isExplicitNegation = lowerReason.contains("does not match") || lowerReason.contains("not match") || lowerReason.contains("not satisfy")
+            val isExplicitPositive = lowerReason.contains("matched") || lowerReason.contains("satisfied") || lowerReason.contains("detected")
+            if (isExplicitNegation) false else isExplicitPositive
+        } else {
+            when {
                 text.startsWith("true", ignoreCase = true) -> true
                 text.startsWith("false", ignoreCase = true) -> false
                 else -> false
             }
-        val reason = reasonRegex.find(text)?.groupValues?.get(1)?.ifBlank { null }
+        }
+
+        val reason = rawReason?.ifBlank { null }
             ?: if (condMatch) "Condition matched" else "Condition not matched"
-        val category = categoryRegex.find(text)?.groupValues?.get(1)?.ifBlank { "other" } ?: "other"
+        val category = categoryRegex.find(jsonCandidate)?.groupValues?.get(1)?.ifBlank { "other" } ?: "other"
 
         return SemanticConditionResult(
             conditionMatched = condMatch,
