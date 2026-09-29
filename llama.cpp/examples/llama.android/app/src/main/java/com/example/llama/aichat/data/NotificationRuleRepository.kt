@@ -9,8 +9,12 @@ class NotificationRuleRepository(private val ruleDao: NotificationRuleDao) {
         return ruleDao.getEnabledRules()
     }
 
-    suspend fun insert(rule: NotificationRule) {
-        ruleDao.insert(rule)
+    suspend fun getRuleById(id: Long): NotificationRule? {
+        return ruleDao.getRuleById(id)
+    }
+
+    suspend fun insert(rule: NotificationRule): Long {
+        return ruleDao.insert(rule)
     }
 
     suspend fun update(rule: NotificationRule) {

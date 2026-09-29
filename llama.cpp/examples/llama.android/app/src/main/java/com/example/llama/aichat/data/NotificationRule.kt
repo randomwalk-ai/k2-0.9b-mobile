@@ -33,6 +33,7 @@ data class NotificationRule(
     val targetAppsJson: String = "[]",
     val ruleIntent: String = "SIMPLE_CONTACT",
     val semanticDepth: String = "AOT_FAST",
+    val semanticCondition: String? = null,
     val createdAt: Long = System.currentTimeMillis(),
     val updatedAt: Long = System.currentTimeMillis()
 ) {

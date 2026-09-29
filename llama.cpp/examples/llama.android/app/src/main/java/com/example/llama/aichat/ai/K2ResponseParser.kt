@@ -121,6 +121,122 @@ object K2ResponseParser {
             category = category
         )
     }
+
+    fun parseCompiledRule(rawResponse: String?, rawRuleText: String): ParsedRule? {
+        if (rawResponse.isNullOrBlank()) {
+            return null
+        }
+
+        val text = rawResponse.trim()
+        val jsonCandidate = if (text.startsWith("{")) text else "{$text"
+
+        return try {
+            // 1. Extract rule_type
+            val ruleTypeRegex = Regex("\"rule_type\"\\s*:\\s*\"([^\"]*)\"", RegexOption.IGNORE_CASE)
+            val rawRuleType = ruleTypeRegex.find(jsonCandidate)?.groupValues?.get(1)?.uppercase()?.trim()
+
+            // 2. Extract execution_engine
+            val engineRegex = Regex("\"execution_engine\"\\s*:\\s*\"([^\"]*)\"", RegexOption.IGNORE_CASE)
+            val rawEngine = engineRegex.find(jsonCandidate)?.groupValues?.get(1)?.uppercase()?.trim()
+
+            // 3. Extract target_person
+            val personRegex = Regex("\"target_person\"\\s*:\\s*(\"([^\"]*)\"|null)", RegexOption.IGNORE_CASE)
+            val personMatch = personRegex.find(jsonCandidate)
+            val rawPerson = personMatch?.groupValues?.get(2)?.trim()?.takeIf { it.isNotEmpty() && !it.equals("null", ignoreCase = true) }
+
+            // 4. Extract action
+            val actionRegex = Regex("\"action\"\\s*:\\s*\"([^\"]*)\"", RegexOption.IGNORE_CASE)
+            val rawAction = actionRegex.find(jsonCandidate)?.groupValues?.get(1)?.uppercase()?.trim() ?: "ALERT"
+
+            // 5. Extract semantic_condition
+            val conditionRegex = Regex("\"semantic_condition\"\\s*:\\s*(\"([^\"]*)\"|null)", RegexOption.IGNORE_CASE)
+            val conditionMatch = conditionRegex.find(jsonCandidate)
+            val rawCondition = conditionMatch?.groupValues?.get(2)?.trim()?.takeIf { it.isNotEmpty() && !it.equals("null", ignoreCase = true) }
+
+            // 6. Extract Arrays: target_apps, positive_topics, excluded_topics
+            val targetAppsList = extractJsonStringArray(jsonCandidate, "target_apps")
+            val positiveTopicsList = extractJsonStringArray(jsonCandidate, "positive_topics")
+            val excludedTopicsList = extractJsonStringArray(jsonCandidate, "excluded_topics")
+
+            val isSchemaValid = rawRuleType != null || rawEngine != null || rawPerson != null ||
+                    targetAppsList.isNotEmpty() || positiveTopicsList.isNotEmpty() ||
+                    excludedTopicsList.isNotEmpty() || rawCondition != null
+            if (!isSchemaValid) {
+                return null
+            }
+
+            // Determine intent
+            val intent = when (rawRuleType) {
+                "APP_FILTER" -> RuleIntent.APP_FILTER
+                "TOPIC_FILTER" -> RuleIntent.TOPIC_FILTER
+                "SIMPLE_CONTACT" -> RuleIntent.SIMPLE_CONTACT
+                "SIMPLE_BLOCK" -> RuleIntent.SIMPLE_BLOCK
+                "CONDITIONAL_CONTACT" -> RuleIntent.CONDITIONAL_CONTACT
+                "CONDITIONAL_EMOTION" -> RuleIntent.CONDITIONAL_EMOTION
+                else -> when {
+                    rawEngine == "K2_DEEP" || rawCondition != null -> RuleIntent.CONDITIONAL_EMOTION
+                    rawPerson != null && rawAction == "MUTE" && positiveTopicsList.isEmpty() && excludedTopicsList.isEmpty() -> RuleIntent.SIMPLE_BLOCK
+                    rawPerson != null && (positiveTopicsList.isNotEmpty() || excludedTopicsList.isNotEmpty()) -> RuleIntent.CONDITIONAL_CONTACT
+                    rawPerson != null -> RuleIntent.SIMPLE_CONTACT
+                    targetAppsList.isNotEmpty() -> RuleIntent.APP_FILTER
+                    else -> RuleIntent.TOPIC_FILTER
+                }
+            }
+
+            val semanticDepth = if (rawEngine == "K2_DEEP" || intent == RuleIntent.CONDITIONAL_EMOTION) "K2_DEEP" else "AOT_FAST"
+
+            // Target Apps expansion
+            val targetApps = mutableSetOf<String>()
+            for (app in targetAppsList) {
+                val cleanApp = app.lowercase().trim()
+                targetApps.add(cleanApp)
+                val known = RuleClassifier.KNOWN_APP_KEYWORDS[cleanApp]
+                if (known != null) targetApps.addAll(known)
+            }
+
+            // Person sanitization
+            val cleanPerson = rawPerson?.lowercase()?.trim()
+
+            // Topics sanitization & expansion
+            val cleanPositiveTopics = positiveTopicsList
+                .map { it.lowercase().trim() }
+                .filter { it.length >= 2 && it !in RuleClassifier.FUNCTIONAL_STOP_WORDS && it != cleanPerson && it !in targetApps }
+                .toSet()
+
+            val cleanExcludedTopics = excludedTopicsList
+                .map { it.lowercase().trim() }
+                .filter { it.length >= 2 && it !in RuleClassifier.FUNCTIONAL_STOP_WORDS && it != cleanPerson && it !in targetApps }
+                .toSet()
+
+            val expandedPositive = RuleClassifier.expandTopicSet(cleanPositiveTopics)
+            val expandedExcluded = RuleClassifier.expandTopicSet(cleanExcludedTopics)
+
+            ParsedRule(
+                rawText = rawRuleText,
+                intent = intent,
+                targetPerson = cleanPerson,
+                action = rawAction,
+                targetApps = targetApps,
+                positiveTopics = expandedPositive,
+                excludedTopics = expandedExcluded,
+                isNegative = rawAction == "MUTE",
+                semanticDepth = semanticDepth,
+                semanticCondition = rawCondition
+            )
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    private fun extractJsonStringArray(json: String, arrayKey: String): List<String> {
+        val arrayRegex = Regex("\"$arrayKey\"\\s*:\\s*\\[([^\\]]*)\\]", RegexOption.IGNORE_CASE)
+        val match = arrayRegex.find(json)?.groupValues?.get(1)?.trim() ?: return emptyList()
+        if (match.isEmpty()) return emptyList()
+        return match.split(",").mapNotNull { token ->
+            val clean = token.trim().removeSurrounding("\"").removeSurrounding("'").trim()
+            if (clean.isNotEmpty()) clean else null
+        }
+    }
 }
 
 data class ToneAnalysisResult(

@@ -291,7 +291,14 @@ class NotificationProcessor(
                             candidateDeepRule.text.lowercase().startsWith("mute")
 
                     // Extract target emotion / tone keywords from rule
-                    val targetTones = RuleClassifier.getEmotionTriggers(candidateDeepRule.text)
+                    val detectedTones = RuleClassifier.getEmotionTriggers(candidateDeepRule.text)
+                    val targetTones = if (detectedTones.isNotEmpty()) {
+                        detectedTones
+                    } else if (!candidateDeepRule.semanticCondition.isNullOrBlank()) {
+                        listOf(candidateDeepRule.semanticCondition)
+                    } else {
+                        emptyList()
+                    }
 
                     // Build single condition evaluation prompt for K2
                     val prompt = K2PromptBuilder.buildTonePrompt(

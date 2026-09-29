@@ -496,6 +496,7 @@ fun RulesSection(
                                     RuleIntent.SIMPLE_CONTACT -> Color(0xFF1B5E20).copy(alpha = 0.15f)
                                     RuleIntent.SIMPLE_BLOCK -> Color(0xFFB71C1C).copy(alpha = 0.15f)
                                     RuleIntent.CONDITIONAL_CONTACT -> Color(0xFF0D47A1).copy(alpha = 0.15f)
+                                    RuleIntent.CONDITIONAL_EMOTION -> Color(0xFF6A1B9A).copy(alpha = 0.18f)
                                     RuleIntent.TOPIC_FILTER -> Color(0xFF4A148C).copy(alpha = 0.15f)
                                     RuleIntent.APP_FILTER -> Color(0xFFE65100).copy(alpha = 0.15f)
                                 }
@@ -507,6 +508,7 @@ fun RulesSection(
                                         RuleIntent.SIMPLE_CONTACT -> "⚡ Fast Contact (<0.2ms)"
                                         RuleIntent.SIMPLE_BLOCK -> "🚫 Direct Block (<0.2ms)"
                                         RuleIntent.CONDITIONAL_CONTACT -> "⚡ AOT Conditional (<0.2ms)"
+                                        RuleIntent.CONDITIONAL_EMOTION -> "🧠 K2 Deep AI (On-Demand)"
                                         RuleIntent.TOPIC_FILTER -> "⚡ AOT Topic Filter (<0.2ms)"
                                         RuleIntent.APP_FILTER -> "⚡ App Filter (<0.2ms)"
                                     },
@@ -518,6 +520,7 @@ fun RulesSection(
                                         RuleIntent.SIMPLE_CONTACT -> Color(0xFF2E7D32)
                                         RuleIntent.SIMPLE_BLOCK -> Color(0xFFD32F2F)
                                         RuleIntent.CONDITIONAL_CONTACT -> Color(0xFF1976D2)
+                                        RuleIntent.CONDITIONAL_EMOTION -> Color(0xFFAB47BC)
                                         RuleIntent.TOPIC_FILTER -> Color(0xFF7B1FA2)
                                         RuleIntent.APP_FILTER -> Color(0xFFEF6C00)
                                     },

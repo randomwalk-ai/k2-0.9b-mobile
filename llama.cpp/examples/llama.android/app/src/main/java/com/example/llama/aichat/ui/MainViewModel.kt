@@ -2,10 +2,13 @@ package com.example.llama.aichat.ui
 
 import android.app.Application
 import android.content.Context
+import android.util.Log
 import androidx.core.app.NotificationManagerCompat
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.llama.aichat.ai.K2InferenceManager
+import com.example.llama.aichat.ai.K2PromptBuilder
+import com.example.llama.aichat.ai.K2ResponseParser
 import com.example.llama.aichat.ai.RuleClassifier
 import com.example.llama.aichat.data.*
 import com.example.llama.aichat.notification.NotificationSummaryManager
@@ -162,18 +165,39 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun addRule(text: String) {
-        viewModelScope.launch {
-            val parsed = RuleClassifier.classify(text)
-            val compiled = parsed.toNotificationRule()
-            ruleRepo.insert(compiled)
+        viewModelScope.launch(Dispatchers.IO) {
+            val initialParsed = RuleClassifier.classify(text)
+            val insertedId = ruleRepo.insert(initialParsed.toNotificationRule())
+            compileRuleWithK2Async(insertedId, text)
         }
     }
 
     fun updateRule(rule: NotificationRule, newText: String) {
-        viewModelScope.launch {
-            val parsed = RuleClassifier.classify(newText)
-            val updated = parsed.toNotificationRule(id = rule.id, enabled = rule.enabled)
+        viewModelScope.launch(Dispatchers.IO) {
+            val initialParsed = RuleClassifier.classify(newText)
+            val updated = initialParsed.toNotificationRule(id = rule.id, enabled = rule.enabled)
             ruleRepo.update(updated)
+            compileRuleWithK2Async(rule.id, newText)
+        }
+    }
+
+    private suspend fun compileRuleWithK2Async(ruleId: Long, rawText: String) {
+        try {
+            val inferenceManager = K2InferenceManager.getInstance(getApplication())
+            val prompt = K2PromptBuilder.buildRuleCompilationPrompt(rawText)
+            val response = inferenceManager.analyze(prompt)
+            if (!response.isNullOrBlank()) {
+                val compiled = K2ResponseParser.parseCompiledRule(response, rawText)
+                if (compiled != null) {
+                    val existing = ruleRepo.getRuleById(ruleId)
+                    val isEnabled = existing?.enabled ?: true
+                    val finalRule = compiled.toNotificationRule(id = ruleId, enabled = isEnabled)
+                    ruleRepo.update(finalRule)
+                    Log.i("MainViewModel", "Rule #$ruleId successfully compiled via K2: intent=${finalRule.ruleIntent}, depth=${finalRule.semanticDepth}, apps=${finalRule.targetAppsJson}, topics=${finalRule.positiveTopicsJson}")
+                }
+            }
+        } catch (e: Exception) {
+            Log.w("MainViewModel", "K2 rule compilation exception (retaining fallback): ${e.message}")
         }
     }
 

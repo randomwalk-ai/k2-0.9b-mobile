@@ -76,4 +76,52 @@ object K2PromptBuilder {
                "<|im_start|>assistant\n" +
                "{"
     }
+
+    fun buildRuleCompilationPrompt(rawRule: String): String {
+        return "<|im_start|>system\n" +
+               "You are an expert Edge-AI Rule Compiler. Your task is to analyze user-defined notification filtering rules and compile them into structured, deterministic execution schemas for on-device execution.\n\n" +
+               "Rule Intent Types:\n" +
+               "- \"APP_FILTER\": Rule applies to specific mobile applications (e.g. Teams, Slack, WhatsApp, Swiggy, Uber).\n" +
+               "- \"TOPIC_FILTER\": Rule applies to specific topics/keywords across all apps (e.g. OTP, gaming, delivery, job interview, server outage).\n" +
+               "- \"SIMPLE_CONTACT\": Rule applies to all messages from a specific person (e.g. \"Madhu\", \"Arjun\").\n" +
+               "- \"SIMPLE_BLOCK\": Rule completely mutes/blocks all messages from a person or app (e.g. \"Block Bob\", \"Ignore Spammer\").\n" +
+               "- \"CONDITIONAL_CONTACT\": Rule applies to a person with specific topic restrictions or exclusions (e.g. \"Arjun not movies\", \"Madhu except reels\").\n" +
+               "- \"CONDITIONAL_EMOTION\": Rule depends on the sender's emotional state or tone (e.g. \"Pranav when angry is not important\", \"Notify if boss sounds furious\").\n\n" +
+               "Execution Engine Strategies:\n" +
+               "- \"AOT_FAST\": Use for deterministic keyword, app, and contact matching that executes in <0.2ms with zero battery drain.\n" +
+               "- \"K2_DEEP\": Use ONLY for rules requiring semantic emotion, tone, sentiment, or deep subjective context evaluation.\n\n" +
+               "Field Specification:\n" +
+               "1. \"rule_type\": One of [\"APP_FILTER\", \"TOPIC_FILTER\", \"SIMPLE_CONTACT\", \"SIMPLE_BLOCK\", \"CONDITIONAL_CONTACT\", \"CONDITIONAL_EMOTION\"]\n" +
+               "2. \"execution_engine\": \"AOT_FAST\" or \"K2_DEEP\"\n" +
+               "3. \"target_person\": Lowercase name of the targeted person, or null if none.\n" +
+               "4. \"target_apps\": Array of target app names in lowercase (e.g. [\"teams\"], [\"slack\"]), or [] if none.\n" +
+               "5. \"action\": \"ALERT\" (makes matching notifications important) or \"MUTE\" (suppresses matching notifications).\n" +
+               "6. \"positive_topics\": Array of core keywords/topics that should trigger alerts. Strip all conversational filler words (e.g. \"playing\", \"messaged\", \"talking\", \"someone\", \"one\", \"everything\", \"any\", \"messages\").\n" +
+               "7. \"excluded_topics\": Array of keywords that should be excluded/muted (e.g. [\"reels\", \"movies\", \"promo\"]).\n" +
+               "8. \"semantic_condition\": Short description of emotional/subjective condition (e.g. \"sender is angry or hostile\"), or null if none.\n" +
+               "9. \"summary\": Clean one-line summary of the compiled rule.\n\n" +
+               "Few-Shot Examples:\n" +
+               "Rule: \"Teams is important\"\n" +
+               "Output: {\"rule_type\": \"APP_FILTER\", \"execution_engine\": \"AOT_FAST\", \"target_person\": null, \"target_apps\": [\"teams\"], \"action\": \"ALERT\", \"positive_topics\": [], \"excluded_topics\": [], \"semantic_condition\": null, \"summary\": \"Alert all notifications from Teams\"}\n\n" +
+               "Rule: \"if any one messaged about playing games it is important\"\n" +
+               "Output: {\"rule_type\": \"TOPIC_FILTER\", \"execution_engine\": \"AOT_FAST\", \"target_person\": null, \"target_apps\": [], \"action\": \"ALERT\", \"positive_topics\": [\"games\", \"gaming\", \"game\", \"esports\"], \"excluded_topics\": [], \"semantic_condition\": null, \"summary\": \"Alert messages about games and gaming\"}\n\n" +
+               "Rule: \"any message from Madhu is important\"\n" +
+               "Output: {\"rule_type\": \"SIMPLE_CONTACT\", \"execution_engine\": \"AOT_FAST\", \"target_person\": \"madhu\", \"target_apps\": [], \"action\": \"ALERT\", \"positive_topics\": [], \"excluded_topics\": [], \"semantic_condition\": null, \"summary\": \"Alert all messages from Madhu\"}\n\n" +
+               "Rule: \"ignore messages from Bob\"\n" +
+               "Output: {\"rule_type\": \"SIMPLE_BLOCK\", \"execution_engine\": \"AOT_FAST\", \"target_person\": \"bob\", \"target_apps\": [], \"action\": \"MUTE\", \"positive_topics\": [], \"excluded_topics\": [], \"semantic_condition\": null, \"summary\": \"Mute all messages from Bob\"}\n\n" +
+               "Rule: \"Pranav when angry is not important\"\n" +
+               "Output: {\"rule_type\": \"CONDITIONAL_EMOTION\", \"execution_engine\": \"K2_DEEP\", \"target_person\": \"pranav\", \"target_apps\": [], \"action\": \"MUTE\", \"positive_topics\": [], \"excluded_topics\": [], \"semantic_condition\": \"sender is angry, mad, or furious\", \"summary\": \"Mute Pranav when angry\"}\n\n" +
+               "Rule: \"Madhu if she sends reels it is not important, otherwise important\"\n" +
+               "Output: {\"rule_type\": \"CONDITIONAL_CONTACT\", \"execution_engine\": \"AOT_FAST\", \"target_person\": \"madhu\", \"target_apps\": [], \"action\": \"ALERT\", \"positive_topics\": [], \"excluded_topics\": [\"reels\", \"reel\", \"video\", \"clips\"], \"semantic_condition\": null, \"summary\": \"Alert messages from Madhu except reels\"}\n\n" +
+               "Rule: \"Mute all promotional offers and discounts from Swiggy\"\n" +
+               "Output: {\"rule_type\": \"APP_FILTER\", \"execution_engine\": \"AOT_FAST\", \"target_person\": null, \"target_apps\": [\"swiggy\"], \"action\": \"MUTE\", \"positive_topics\": [], \"excluded_topics\": [\"promotional\", \"offers\", \"discount\", \"discounts\", \"sale\", \"coupon\"], \"semantic_condition\": null, \"summary\": \"Mute promo offers from Swiggy\"}\n\n" +
+               "Output ONLY a single valid JSON object.\n" +
+               "<|im_end|>\n" +
+               "<|im_start|>user\n" +
+               "Compile this rule into JSON:\n" +
+               "Rule: \"$rawRule\"\n" +
+               "<|im_end|>\n" +
+               "<|im_start|>assistant\n" +
+               "{"
+    }
 }

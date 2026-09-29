@@ -7,6 +7,7 @@ enum class RuleIntent {
     SIMPLE_CONTACT,      // Pure contact name match (e.g. "Madhu", "Arjun")
     SIMPLE_BLOCK,        // Pure contact block (e.g. "Block Bob", "Ignore Spammer")
     CONDITIONAL_CONTACT, // Person rule with topic/negation (e.g. "Arjun not movies", "Arjun only games", "Madhu not reels")
+    CONDITIONAL_EMOTION, // Person or general rule requiring emotion / tone evaluation (e.g. "Pranav when angry is not important")
     TOPIC_FILTER,        // Domain / Topic rule (e.g. "Bank transactions and OTP", "Job interviews")
     APP_FILTER           // App-specific rule (e.g. "Slack P0 alerts", "Uber cab arrival")
 }
@@ -20,7 +21,8 @@ data class ParsedRule(
     val positiveTopics: Set<String> = emptySet(),
     val excludedTopics: Set<String> = emptySet(),
     val isNegative: Boolean = false,
-    val semanticDepth: String = "AOT_FAST"
+    val semanticDepth: String = "AOT_FAST",
+    val semanticCondition: String? = null
 ) {
     fun toNotificationRule(id: Long = 0L, enabled: Boolean = true): NotificationRule {
         return NotificationRule(
@@ -34,6 +36,7 @@ data class ParsedRule(
             targetAppsJson = JsonListHelper.toJson(targetApps),
             ruleIntent = intent.name,
             semanticDepth = semanticDepth,
+            semanticCondition = semanticCondition,
             createdAt = System.currentTimeMillis(),
             updatedAt = System.currentTimeMillis()
         )
@@ -42,7 +45,7 @@ data class ParsedRule(
 
 object RuleClassifier {
 
-    private val FUNCTIONAL_STOP_WORDS = setOf(
+    internal val FUNCTIONAL_STOP_WORDS = setOf(
         "whatever", "messages", "message", "messaged", "messaging", "from", "any", "all", "every", "is", "are", "was", "were", "been",
         "important", "alert", "priority", "urgent", "on", "in", "notification",
         "notifications", "to", "the", "and", "with", "for", "msg", "msgs",
@@ -65,7 +68,7 @@ object RuleClassifier {
     )
 
     // Comprehensive Domain Semantic Knowledge Graph for Ahead-Of-Time (AOT) Synonym Expansion
-    private val DOMAIN_SYNONYMS = mapOf(
+    internal val DOMAIN_SYNONYMS = mapOf(
         // Social Media, Reels & Videos
         "reel" to listOf("reel", "reels", "video", "videos", "clip", "clips", "instagram.com/reel", "shared a reel", "sent a reel", "watch reel"),
         "reels" to listOf("reel", "reels", "video", "videos", "clip", "clips", "instagram.com/reel", "shared a reel", "sent a reel", "watch reel"),
@@ -148,7 +151,7 @@ object RuleClassifier {
         "spam" to listOf("spam", "promotional", "viewed your profile", "appeared in searches", "daily quote", "blessings", "horoscope", "astrology", "reels you may like", "suggested for you", "congratulate")
     )
 
-    private val KNOWN_APP_KEYWORDS = mapOf(
+    internal val KNOWN_APP_KEYWORDS = mapOf(
         "whatsapp" to listOf("whatsapp", "com.whatsapp", "com.whatsapp.w4b"),
         "instagram" to listOf("instagram", "com.instagram.android"),
         "telegram" to listOf("telegram", "org.telegram.messenger", "org.telegram.plus"),
@@ -289,6 +292,9 @@ object RuleClassifier {
         val hasCondition = expandedPositiveTopics.isNotEmpty() || expandedExcludedTopics.isNotEmpty()
 
         val intent = when {
+            // Case 0: Deep emotion / tone reasoning -> CONDITIONAL_EMOTION
+            isDeepReasoningRequired -> RuleIntent.CONDITIONAL_EMOTION
+
             // Case 1: Pure block with no condition -> SIMPLE_BLOCK
             isPersonRule && isPureNegative && !hasCondition -> RuleIntent.SIMPLE_BLOCK
 
@@ -305,6 +311,11 @@ object RuleClassifier {
             else -> RuleIntent.TOPIC_FILTER
         }
 
+        val semanticCondition = if (isDeepReasoningRequired) {
+            val triggers = getEmotionTriggers(lower)
+            if (triggers.isNotEmpty()) "sender emotion: " + triggers.joinToString(", ") else null
+        } else null
+
         return ParsedRule(
             rawText = ruleText,
             intent = intent,
@@ -314,7 +325,8 @@ object RuleClassifier {
             positiveTopics = expandedPositiveTopics,
             excludedTopics = expandedExcludedTopics,
             isNegative = isPureNegative,
-            semanticDepth = semanticDepth
+            semanticDepth = semanticDepth,
+            semanticCondition = semanticCondition
         )
     }
 
@@ -327,7 +339,7 @@ object RuleClassifier {
         return tokens.any { it in topicRoots }
     }
 
-    private fun expandTopicSet(rawTopics: Set<String>): Set<String> {
+    internal fun expandTopicSet(rawTopics: Set<String>): Set<String> {
         val expanded = mutableSetOf<String>()
         for (topic in rawTopics) {
             val clean = topic.lowercase().trim()

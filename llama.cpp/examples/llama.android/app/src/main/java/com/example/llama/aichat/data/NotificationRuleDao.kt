@@ -11,8 +11,11 @@ interface NotificationRuleDao {
     @Query("SELECT * FROM notification_rules WHERE enabled = 1")
     suspend fun getEnabledRules(): List<NotificationRule>
 
+    @Query("SELECT * FROM notification_rules WHERE id = :id LIMIT 1")
+    suspend fun getRuleById(id: Long): NotificationRule?
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insert(rule: NotificationRule)
+    suspend fun insert(rule: NotificationRule): Long
 
     @Update
     suspend fun update(rule: NotificationRule)
