@@ -107,14 +107,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 summaryManager.updateSummary(list)
             }
         }
-
-        // Re-compile existing rules in background on startup to clean up schemas
-        viewModelScope.launch(Dispatchers.IO) {
-            val allRules = ruleRepo.getAllRulesSync()
-            allRules.forEach { rule ->
-                compileRuleWithK2(rule.id, rule.text)
-            }
-        }
     }
 
     fun setRetentionPeriod(period: RetentionPeriod) {
