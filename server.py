@@ -11,6 +11,7 @@ from typing import Optional, List, Dict, Any
 
 import database as db
 from model_manager import manager, MODEL_CONFIGS, PERSONAS
+from model_engine import model_engine, PRELOADED_RULES
 
 # Try importing PDF reader
 try:
@@ -62,6 +63,321 @@ async def root():
 @app.get("/blog.html")
 async def blog():
     return FileResponse("static/blog.html")
+
+@app.get("/post")
+@app.get("/post.html")
+@app.get("/journey")
+async def post_page():
+    return FileResponse("static/post.html")
+
+@app.get("/test")
+@app.get("/test.html")
+async def test_page():
+    return FileResponse("static/test.html")
+
+class TestEvaluateRequest(BaseModel):
+    model: str = "both" # "k2", "llama", "both"
+    rules: str
+    app: str = "WhatsApp"
+    sender: str = "Rahul"
+    text: str = ""
+    is_call: Optional[bool] = False
+
+# Load Test Cases (prefer test_cases_500.json, fallback to test_cases_1000.json)
+TEST_CASES_DATA = []
+target_dataset_file = "test_cases_500.json" if os.path.exists("test_cases_500.json") else "test_cases_1000.json"
+if os.path.exists(target_dataset_file):
+    try:
+        with open(target_dataset_file, "r", encoding="utf-8") as f:
+            TEST_CASES_DATA = json.load(f)
+        print(f"[Server] Loaded {len(TEST_CASES_DATA)} cases from {target_dataset_file}")
+    except Exception as e:
+        print(f"[Server] Error loading test cases: {e}")
+
+@app.get("/api/test/models")
+async def get_test_models():
+    return model_engine.get_models_status()
+
+@app.get("/api/test/rules")
+async def get_test_rules():
+    compiled_data = None
+    if os.path.exists("compiled_rules_phase1.json"):
+        try:
+            with open("compiled_rules_phase1.json", "r", encoding="utf-8") as f:
+                compiled_data = json.load(f)
+        except Exception:
+            pass
+    return {
+        "rules": PRELOADED_RULES,
+        "compiled": compiled_data
+    }
+
+@app.get("/api/test/benchmark-results")
+async def get_benchmark_results():
+    if os.path.exists("phase2_benchmark_500_results.json"):
+        try:
+            with open("phase2_benchmark_500_results.json", "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception as e:
+            return {"error": str(e)}
+    return {"status": "not_run_yet"}
+
+@app.get("/api/test/cases")
+async def get_test_cases(
+    group: Optional[str] = None,
+    rule_id: Optional[str] = None,
+    action: Optional[str] = None,
+    search: Optional[str] = None,
+    limit: Optional[int] = 1000,
+    offset: Optional[int] = 0
+):
+    filtered = TEST_CASES_DATA
+    if group:
+        filtered = [c for c in filtered if group.lower() in c.get("group", "").lower()]
+    if rule_id:
+        filtered = [c for c in filtered if c.get("rule_id") == rule_id]
+    if action:
+        filtered = [c for c in filtered if c.get("ground_truth_action", "").upper() == action.upper()]
+    if search:
+        s = search.lower()
+        filtered = [
+            c for c in filtered 
+            if s in c.get("text", "").lower() or s in c.get("sender", "").lower() or s in c.get("app", "").lower() or s in c.get("ground_truth_reason", "").lower()
+        ]
+    
+    total = len(filtered)
+    paginated = filtered[offset : offset + limit] if limit else filtered
+    return {
+        "total": total,
+        "count": len(paginated),
+        "offset": offset,
+        "cases": paginated
+    }
+
+class CompileRulesRequest(BaseModel):
+    model: str = "both" # "k2", "llama", "both"
+    rules: Optional[List[str]] = None
+
+@app.post("/api/test/compile-rules")
+async def compile_rules_endpoint(payload: CompileRulesRequest):
+    """
+    Sends natural language rules to K2 Horizon and Llama 3.2 to classify & compile
+    into structured JSON schemas (SIMPLE_RULE vs COMPLEX_RULE, category, tone, etc.).
+    """
+    target_rules = payload.rules if payload.rules else PRELOADED_RULES
+    model_choice = payload.model.lower()
+
+    async def event_generator():
+        yield f"event: compile_start\ndata: {json.dumps({'total': len(target_rules), 'model': model_choice})}\n\n"
+
+        for idx, r_text in enumerate(target_rules):
+            yield f"event: rule_compile_progress\ndata: {json.dumps({'index': idx + 1, 'total': len(target_rules), 'rule_text': r_text})}\n\n"
+
+            k2_res = None
+            llama_res = None
+
+            # 1. Compile with K2
+            if model_choice in ["k2", "both"]:
+                k2_prompt = model_engine.build_compile_rule_prompt_chatml(r_text)
+                async for chunk in model_engine.stream_k2_inference(k2_prompt):
+                    if chunk["type"] == "final":
+                        k2_res = chunk
+
+            # 2. Compile with Llama
+            if model_choice in ["llama", "both"]:
+                llama_prompt = model_engine.build_compile_rule_prompt_llama(r_text)
+                async for chunk in model_engine.stream_llama_inference(llama_prompt):
+                    if chunk["type"] == "final":
+                        llama_res = chunk
+
+            rule_result = {
+                "rule_index": idx + 1,
+                "rule_text": r_text,
+                "k2": {
+                    "schema": k2_res.get("parsed_json") if k2_res else None,
+                    "is_valid_json": k2_res.get("is_valid_json", False) if k2_res else False,
+                    "raw_output": k2_res.get("raw_output", "") if k2_res else "",
+                    "metrics": k2_res.get("metrics") if k2_res else None
+                } if k2_res else None,
+                "llama": {
+                    "schema": llama_res.get("parsed_json") if llama_res else None,
+                    "is_valid_json": llama_res.get("is_valid_json", False) if llama_res else False,
+                    "raw_output": llama_res.get("raw_output", "") if llama_res else "",
+                    "metrics": llama_res.get("metrics") if llama_res else None
+                } if llama_res else None
+            }
+
+            yield f"event: rule_compile_result\ndata: {json.dumps(rule_result)}\n\n"
+
+        yield f"event: compile_complete\ndata: {json.dumps({'status': 'complete', 'total': len(target_rules)})}\n\n"
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no"
+        }
+    )
+
+class BatchRunRequest(BaseModel):
+    model: str = "both" # "k2", "llama", "both"
+    test_case_ids: Optional[List[int]] = None
+    limit: Optional[int] = 10
+    group: Optional[str] = None
+    rule_id: Optional[str] = None
+
+@app.post("/api/test/batch-run")
+async def run_batch_benchmark(payload: BatchRunRequest):
+    """
+    Executes real-time batch benchmark across local models on selected test cases.
+    Streams progress, decisions, accuracy match, and scorecard.
+    """
+    # Filter target cases
+    target_cases = TEST_CASES_DATA
+    if payload.test_case_ids:
+        id_set = set(payload.test_case_ids)
+        target_cases = [c for c in target_cases if c["id"] in id_set]
+    elif payload.group:
+        target_cases = [c for c in target_cases if payload.group.lower() in c.get("group", "").lower()]
+    elif payload.rule_id:
+        target_cases = [c for c in target_cases if c.get("rule_id") == payload.rule_id]
+    
+    if payload.limit and payload.limit > 0:
+        target_cases = target_cases[:payload.limit]
+
+    total_cases = len(target_cases)
+    model_choice = payload.model.lower()
+
+    async def batch_generator():
+        k2_correct = 0
+        llama_correct = 0
+        k2_total_time = 0.0
+        llama_total_time = 0.0
+        processed_count = 0
+
+        yield f"event: batch_start\ndata: {json.dumps({'total': total_cases, 'model': model_choice})}\n\n"
+
+        for idx, tc in enumerate(target_cases):
+            processed_count += 1
+            case_id = tc["id"]
+            gt_action = tc["ground_truth_action"] # "ALERT" or "MUTE"
+            
+            # Find the corresponding rule text
+            r_idx = 0
+            if tc["rule_id"].startswith("rule_"):
+                try:
+                    r_idx = int(tc["rule_id"].split("_")[1]) - 1
+                except Exception:
+                    r_idx = 0
+            rule_text = PRELOADED_RULES[r_idx] if 0 <= r_idx < len(PRELOADED_RULES) else PRELOADED_RULES[0]
+
+            yield f"event: case_progress\ndata: {json.dumps({'index': idx + 1, 'total': total_cases, 'case_id': case_id, 'sender': tc['sender'], 'app': tc['app']})}\n\n"
+
+            k2_res = None
+            llama_res = None
+
+            # 1. Run K2
+            if model_choice in ["k2", "both"]:
+                k2_prompt = model_engine.build_prompt_chatml(
+                    rules=rule_text,
+                    app_name=tc["app"],
+                    sender=tc["sender"],
+                    text=tc["text"],
+                    is_call=tc.get("is_call", False)
+                )
+                async for chunk in model_engine.stream_k2_inference(k2_prompt):
+                    if chunk["type"] == "final":
+                        k2_res = chunk
+
+            # 2. Run Llama
+            if model_choice in ["llama", "both"]:
+                llama_prompt = model_engine.build_prompt_llama(
+                    rules=rule_text,
+                    app_name=tc["app"],
+                    sender=tc["sender"],
+                    text=tc["text"],
+                    is_call=tc.get("is_call", False)
+                )
+                async for chunk in model_engine.stream_llama_inference(llama_prompt):
+                    if chunk["type"] == "final":
+                        llama_res = chunk
+
+            # Evaluate decision accuracy
+            k2_decision = "MUTE"
+            k2_is_correct = False
+            if k2_res and k2_res.get("parsed_json"):
+                pj = k2_res["parsed_json"]
+                k2_decision = "ALERT" if (pj.get("alert") is True or pj.get("important") is True) else "MUTE"
+                k2_is_correct = (k2_decision == gt_action)
+                if k2_is_correct:
+                    k2_correct += 1
+                k2_total_time += k2_res["metrics"]["total_ms"]
+
+            llama_decision = "MUTE"
+            llama_is_correct = False
+            if llama_res and llama_res.get("parsed_json"):
+                pj = llama_res["parsed_json"]
+                llama_decision = "ALERT" if (pj.get("alert") is True or pj.get("important") is True) else "MUTE"
+                llama_is_correct = (llama_decision == gt_action)
+                if llama_is_correct:
+                    llama_correct += 1
+                llama_total_time += llama_res["metrics"]["total_ms"]
+
+            case_summary = {
+                "case_id": case_id,
+                "rule_name": tc["rule_name"],
+                "group": tc["group"],
+                "app": tc["app"],
+                "sender": tc["sender"],
+                "text": tc["text"],
+                "ground_truth": gt_action,
+                "ground_truth_reason": tc["ground_truth_reason"],
+                "difficulty": tc.get("difficulty", "Medium"),
+                "k2": {
+                    "decision": k2_decision,
+                    "correct": k2_is_correct,
+                    "metrics": k2_res.get("metrics") if k2_res else None,
+                    "reason": k2_res.get("parsed_json", {}).get("reason", "") if k2_res and k2_res.get("parsed_json") else "",
+                    "raw_output": k2_res.get("raw_output", "") if k2_res else ""
+                } if k2_res else None,
+                "llama": {
+                    "decision": llama_decision,
+                    "correct": llama_is_correct,
+                    "metrics": llama_res.get("metrics") if llama_res else None,
+                    "reason": llama_res.get("parsed_json", {}).get("reason", "") if llama_res and llama_res.get("parsed_json") else "",
+                    "raw_output": llama_res.get("raw_output", "") if llama_res else ""
+                } if llama_res else None
+            }
+
+            yield f"event: case_result\ndata: {json.dumps(case_summary)}\n\n"
+
+        # Final Scorecard
+        scorecard = {
+            "total_evaluated": processed_count,
+            "k2": {
+                "correct": k2_correct,
+                "accuracy": round((k2_correct / processed_count) * 100, 1) if processed_count > 0 else 0,
+                "avg_latency_ms": round(k2_total_time / processed_count, 1) if processed_count > 0 else 0
+            },
+            "llama": {
+                "correct": llama_correct,
+                "accuracy": round((llama_correct / processed_count) * 100, 1) if processed_count > 0 else 0,
+                "avg_latency_ms": round(llama_total_time / processed_count, 1) if processed_count > 0 else 0
+            }
+        }
+        yield f"event: batch_complete\ndata: {json.dumps(scorecard)}\n\n"
+
+    return StreamingResponse(
+        batch_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no"
+        }
+    )
 
 @app.get("/api/status")
 async def get_status():

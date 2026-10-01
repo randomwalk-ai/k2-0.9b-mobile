@@ -1,0 +1,498 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>We Put K2-Horizon 0.9B LLM on Android — Until?? Here's What Happened Next</title>
+  
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              50: '#f0fdf4',
+              100: '#dcfce7',
+              500: '#16a34a',
+              600: '#15803d',
+              700: '#166534',
+              900: '#14532d'
+            }
+          },
+          fontFamily: {
+            serif: ['Newsreader', 'Georgia', 'Cambria', 'serif'],
+            sans: ['Plus Jakarta Sans', 'Inter', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'sans-serif'],
+            mono: ['JetBrains Mono', 'Fira Code', 'Menlo', 'monospace']
+          }
+        }
+      }
+    }
+  </script>
+
+  <!-- Google Fonts: Newsreader, Plus Jakarta Sans, JetBrains Mono -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+
+  <style>
+    body {
+      background-color: #ffffff;
+      color: #1e293b;
+      font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+      -webkit-font-smoothing: antialiased;
+    }
+
+    .article-body p {
+      font-size: 1.125rem;
+      line-height: 1.85;
+      color: #334155;
+      margin-bottom: 1.5rem;
+    }
+
+    .article-body h2 {
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      font-weight: 800;
+      color: #0f172a;
+      font-size: 1.75rem;
+      line-height: 1.3;
+      margin-top: 2.75rem;
+      margin-bottom: 1.25rem;
+      letter-spacing: -0.025em;
+    }
+
+    .highlight-quote {
+      border-left: 3px solid #0f172a;
+      padding-left: 1.25rem;
+      margin: 2rem 0;
+      font-family: 'Newsreader', serif;
+      font-size: 1.35rem;
+      line-height: 1.6;
+      color: #0f172a;
+      font-style: italic;
+    }
+
+    .screenshot-frame {
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 16px;
+      overflow: hidden;
+      box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.04);
+      break-inside: avoid;
+    }
+
+    /* Print / PDF Stylesheet */
+    @media print {
+      .no-print {
+        display: none !important;
+      }
+      body {
+        background: #ffffff !important;
+        color: #000000 !important;
+      }
+      main {
+        padding: 0 !important;
+        max-width: 100% !important;
+      }
+      .screenshot-frame {
+        box-shadow: none !important;
+        border: 1px solid #cbd5e1 !important;
+        break-inside: avoid !important;
+        page-break-inside: avoid !important;
+      }
+      img {
+        max-height: 440px !important;
+      }
+      @page {
+        margin: 1.2cm;
+      }
+    }
+  </style>
+</head>
+<body class="min-h-screen bg-white text-slate-800 font-sans">
+
+  <!-- Top Navigation Bar (Hidden in PDF export) -->
+  <header class="no-print border-b border-slate-100 bg-white/95 sticky top-0 z-40 backdrop-blur-md">
+    <div class="max-w-4xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
+      <div class="flex items-center gap-2.5">
+        <span class="w-8 h-8 rounded-lg bg-slate-900 text-white flex items-center justify-center font-mono text-xs font-bold tracking-tight shadow-sm">RW</span>
+        <span class="font-bold text-slate-900 tracking-tight text-base font-mono">randomwalk.ai</span>
+        <span class="text-slate-300">/</span>
+        <span class="text-sm text-slate-500 font-medium">Engineering Blog</span>
+      </div>
+
+      <!-- Download Action Buttons -->
+      <div class="flex items-center gap-2">
+        <button onclick="window.print()" class="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-700 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 border border-slate-200 px-3 py-1.5 rounded-lg transition-all cursor-pointer shadow-2xs">
+          <i data-lucide="printer" class="w-3.5 h-3.5 text-slate-600"></i>
+          <span>Save as PDF</span>
+        </button>
+
+        <button onclick="downloadMarkdown()" class="inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-800 hover:text-emerald-900 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-3 py-1.5 rounded-lg transition-all cursor-pointer shadow-2xs">
+          <i data-lucide="download" class="w-3.5 h-3.5 text-emerald-700"></i>
+          <span>Download .MD</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Article Container -->
+  <main class="max-w-3xl mx-auto px-4 sm:px-6 py-10 sm:py-16">
+
+    <!-- Article Header Area (Always printed on Page 1) -->
+    <div class="article-header space-y-6 pb-8 border-b border-slate-100">
+      <div class="flex items-center gap-2">
+        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+          Case Study &amp; System Design
+        </span>
+        <span class="text-xs text-slate-400 font-mono">• 5 min read</span>
+      </div>
+
+      <h1 class="text-3xl sm:text-5xl font-extrabold text-slate-900 tracking-tight leading-[1.15]">
+        We Put K2-Horizon 0.9B LLM on Android — Until?? Here's What Happened Next
+      </h1>
+
+      <p class="text-lg sm:text-xl text-slate-600 leading-relaxed font-normal">
+        A journey through on-device model deployment: how we benchmarked K2 Horizon, tackled mobile heating and battery drain on an 8GB Android device, and how turning the model into an <em>Ahead-of-Time Rule Compiler</em> made it practical.
+      </p>
+
+      <div class="flex items-center justify-between pt-4">
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-full bg-slate-900 text-white flex items-center justify-center font-bold text-sm font-mono">
+            RW
+          </div>
+          <div>
+            <div class="font-semibold text-slate-900 text-sm font-mono">randomwalk.ai</div>
+            <div class="text-xs text-slate-500">Engineering Team • 8GB RAM Test Device</div>
+          </div>
+        </div>
+
+        <span class="inline-flex items-center gap-1.5 text-xs font-mono text-slate-600 bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-md">
+          <i data-lucide="box" class="w-3.5 h-3.5 text-slate-500"></i> Model: IFM/K2-Horizon-0.9B
+        </span>
+      </div>
+    </div>
+
+    <!-- Article Content -->
+    <article class="article-body mt-10">
+
+      <!-- Origin Story -->
+      <p>
+        We originally set out to test the new <strong>K2 Horizon</strong> model family locally. We first benchmarked both the <strong>0.9B</strong> and <strong>7B</strong> models on a 32GB RAM laptop by building a local chatbot testbed. While the 7B model delivered solid answers, its latency and memory load were noticeably heavier compared to the nimble 0.9B variant. For mobile deployment on Android, the 0.9B model was the clear contender. Given K2's strong reasoning capabilities even at smaller parameter sizes, we wanted to build a practical real-world use case—which led us to create an on-device <strong>Notification Analyzer</strong>.
+      </p>
+
+      <!-- 1. The Problem Statement -->
+      <h2>1. The Everyday Problem: Missing Important Notifications When We Are Busy / Work</h2>
+      
+      <p>
+        Every day, our phones get flooded with notification noise. When busy at work, in meetings, or sleeping at night, muting notifications is the easiest fix—but it comes at a cost: <strong>you risk missing the alerts that actually matter</strong>.
+      </p>
+
+      <p>
+        We built an on-device Android notification analyzer where you define priority rules in plain English. When an alert matches your rules, <strong>the app alerts you through a high-priority media sound chime and custom vibration—even if your phone's notification volume is muted or set to zero</strong>. It is 100% private because everything runs locally using <strong>K2 Horizon 0.9B</strong>—a compact open-weights Small Language Model (SLM).
+      </p>
+
+      <!-- 2. The Development Journey -->
+      <h2>2. The Development Journey: Tackling the Heating Effect</h2>
+
+      <p>
+        Deploying a language model directly on a mobile device introduces strict thermal and power constraints. Unlike a server with dedicated cooling, mobile processors quickly throttle under continuous load. Here is how the development unfolded across three iterations:
+      </p>
+
+      <div class="overflow-x-auto my-6 border border-slate-200 rounded-xl bg-slate-50/40 p-1">
+        <table class="w-full text-left text-sm border-collapse">
+          <thead>
+            <tr class="border-b border-slate-200 text-xs font-semibold text-slate-500 uppercase tracking-wider">
+              <th class="py-3 px-3 w-16">Attempt</th>
+              <th class="py-3 px-4 w-5/12">Setup</th>
+              <th class="py-3 px-4">What happened</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-100 text-slate-700 bg-white">
+            <tr>
+              <td class="py-3.5 px-3 font-mono font-bold text-slate-900 align-top">1</td>
+              <td class="py-3.5 px-4 align-top font-medium text-slate-800">Full precision 0.9B (~2.1 GB), inference on every notification</td>
+              <td class="py-3.5 px-4 align-top text-slate-600">Loaded fine into RAM, but heavy CPU compute on each alert caused immediate phone heating and battery drain.</td>
+            </tr>
+            <tr>
+              <td class="py-3.5 px-3 font-mono font-bold text-slate-900 align-top">2</td>
+              <td class="py-3.5 px-4 align-top font-medium text-slate-800">4-bit quantized (Q4_K_M, ~635 MB), kept resident in RAM</td>
+              <td class="py-3.5 px-4 align-top text-slate-600">Reduced memory size by 70%, but continuous requests and background residency still kept the device warm during multitasking.</td>
+            </tr>
+            <tr>
+              <td class="py-3.5 px-3 font-mono font-bold text-slate-900 align-top">3</td>
+              <td class="py-3.5 px-4 align-top font-medium text-slate-800">4-bit quantized with lazy loading (unloads when idle)</td>
+              <td class="py-3.5 px-4 align-top text-slate-600">Model unloads after inactivity, reducing standby heat. Bursts of incoming alerts still triggered repeated cold-starts and inference spikes.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p>
+        Each iteration improved battery efficiency, but running model inference on every incoming notification was fundamentally the wrong design for an always-on background service. That led to rethinking the entire architecture from first principles.
+      </p>
+
+      <!-- 3. The Optimization & Architecture Diagram -->
+      <h2>3. The Optimization: Ahead-of-Time Rule Compilation with Fast Classifier</h2>
+
+      <div class="highlight-quote">
+        "For simple rules, why should an LLM run at runtime to decide if an alert is important? We can delegate easy tasks to a fast classifier."
+      </div>
+
+      <p>
+        Instead of treating K2 Horizon as a runtime filter that evaluates every message, we convert it into an <strong>Ahead-of-Time (AOT) Rule Compiler</strong>. The language model only runs when you create or edit a rule, translating plain-English intent into deterministic matching logic.
+      </p>
+
+      <!-- ARCHITECTURE DIAGRAM (Comes FIRST before explanation points) -->
+      <div class="screenshot-frame my-8 p-3 sm:p-5 flex justify-center bg-[#fafafa]">
+        <img src="/static/images/architecture_diagram.jpg" alt="System Architecture: AI Rule Engine" class="rounded-xl max-w-full h-auto shadow-xs object-contain">
+      </div>
+
+      <p>
+        Here is how the dual-engine pipeline operates in practice:
+      </p>
+
+      <ul class="space-y-3.5 my-6 list-disc list-inside text-slate-700 text-base">
+        <li>
+          <strong>1. At Rule Creation Time (AOT Compilation):</strong> When you type a rule like <em>"if any msg from madhu it is important, if she sends reels it is not important"</em>, K2 processes it once. It extracts the contact name, required topic triggers, and excluded keywords into a structured JSON schema.
+        </li>
+        <li>
+          <strong>2. Fast Classifier Runtime Path (&lt;0.2 ms):</strong> When a notification arrives, the on-device classifier evaluates it in native memory against the compiled schema. App filters, contact lookups, and keyword exclusions are processed in less than 0.2 milliseconds with zero CPU spikes and zero thermal buildup.
+        </li>
+        <li>
+          <strong>3. Complex Semantic Rules (K2 On-Demand):</strong> If a rule explicitly requires sentiment analysis or emotional tone (e.g. <em>"any message from Pranav when he is angry it is not important"</em>), the fast classifier routes only those specific matching messages to K2 Horizon for deep semantic reasoning.
+        </li>
+      </ul>
+
+      <p>
+        By isolating model inference to rule compilation and rare complex sentiment checks, standard daily notification triage runs entirely on lightweight native logic.
+      </p>
+
+      <!-- 4. Real World Testing & Screenshots -->
+      <h2>4. Real-World Results &amp; What the Tests Showed</h2>
+
+      <p>
+        Below are screens from testing the application across various everyday scenarios:
+      </p>
+
+      <!-- Screenshot 1: Rules Screen -->
+      <div class="screenshot-frame my-8 p-6 space-y-4">
+        <div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 pb-3">
+          <div>
+            <h4 class="font-bold text-slate-900 text-base m-0">Active Rules Screen</h4>
+            <p class="text-xs text-slate-500 m-0">Rules categorized by K2 Horizon into Fast Classifier vs. Deep AI tiers</p>
+          </div>
+          <span class="text-xs font-mono bg-emerald-100 text-emerald-800 px-2 py-1 rounded">Compiled Schema</span>
+        </div>
+
+        <div class="grid md:grid-cols-12 gap-6 items-center pt-2">
+          <div class="md:col-span-5 flex justify-center">
+            <img src="/static/images/rules_screen.png" alt="Notification Analyzer Active Rules Screen" class="rounded-xl border border-slate-300 max-h-[460px] shadow-sm object-contain w-auto">
+          </div>
+          <div class="md:col-span-7 space-y-2.5 text-sm">
+            <div class="text-xs font-semibold text-slate-500 uppercase tracking-wider">How K2 Categorized Each Rule:</div>
+            
+            <div class="p-2.5 rounded-lg bg-white border border-slate-200 flex items-center justify-between">
+              <span class="text-xs font-mono text-slate-900 font-semibold">"if pranav calls me it is important"</span>
+              <span class="text-xs text-emerald-700 font-medium">Fast Contact (&lt;0.2ms)</span>
+            </div>
+
+            <div class="p-2.5 rounded-lg bg-white border border-slate-200 flex items-center justify-between">
+              <span class="text-xs font-mono text-slate-900 font-semibold">"anyone msges about playing cricket it is important"</span>
+              <span class="text-xs text-purple-700 font-medium">AOT Topic Filter (&lt;0.2ms)</span>
+            </div>
+
+            <div class="p-2.5 rounded-lg bg-white border border-slate-200 flex items-center justify-between">
+              <span class="text-xs font-mono text-slate-900 font-semibold">"if any msg from madhu it is important, if she sends reels it is not important"</span>
+              <span class="text-xs text-blue-700 font-medium">AOT Conditional (&lt;0.2ms)</span>
+            </div>
+
+            <div class="p-2.5 rounded-lg bg-white border border-slate-200 flex items-center justify-between">
+              <span class="text-xs font-mono text-slate-900 font-semibold">"any message from pranav when he his angry it is not important"</span>
+              <span class="text-xs text-purple-600 font-medium">K2 Deep AI (On-Demand)</span>
+            </div>
+
+            <div class="p-2.5 rounded-lg bg-white border border-slate-200 flex items-center justify-between">
+              <span class="text-xs font-mono text-slate-900 font-semibold">"any message from teams is important"</span>
+              <span class="text-xs text-amber-700 font-medium">App Filter (&lt;0.2ms)</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Screenshots 2 & 3: Full Feeds Side by Side (Screen 1 clean, Screen 2 highlighted on edge case) -->
+      <div class="screenshot-frame my-8 p-6 space-y-6">
+        <div class="border-b border-slate-200 pb-3">
+          <h4 class="font-bold text-slate-900 text-base m-0">Live Notification Feed Testing</h4>
+          <p class="text-xs text-slate-500 m-0">Fast filtering, conditional exclusions, and on-demand emotion evaluation</p>
+        </div>
+
+        <div class="grid md:grid-cols-2 gap-6">
+          
+          <!-- Screen A (Clean) -->
+          <div class="space-y-3">
+            <div class="text-xs font-bold text-slate-700 uppercase tracking-wide flex items-center gap-1.5">
+              <span class="w-2 h-2 rounded-full bg-emerald-500"></span> Fast Filtering &amp; Exclusions
+            </div>
+            <div class="flex justify-center bg-slate-100/70 p-3 rounded-xl border border-slate-200">
+              <img src="/static/images/feed_screen_1.png" alt="Notification Feed showing Fast Exclusions and Topic matching" class="rounded-lg max-h-[440px] shadow-sm object-contain w-auto">
+            </div>
+          </div>
+
+          <!-- Screen B (Highlighted Red Box on Edge Case) -->
+          <div class="space-y-3">
+            <div class="text-xs font-bold text-slate-700 uppercase tracking-wide flex items-center gap-1.5">
+              <span class="w-2 h-2 rounded-full bg-purple-500"></span> K2 On-Demand Emotion Triage
+            </div>
+            <div class="flex justify-center bg-slate-100/70 p-3 rounded-xl border border-slate-200">
+              <img src="/static/images/feed_screen_2_highlighted.png" alt="Notification Feed showing K2 Deep AI Emotion Triage with highlighted edge case" class="rounded-lg max-h-[440px] shadow-sm object-contain w-auto">
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- Edge Case Observation (Directly below screenshots) -->
+      <div class="p-4 rounded-xl bg-amber-50/70 border border-amber-200 my-6">
+        <div class="font-bold text-amber-900 text-sm mb-1 flex items-center gap-1.5">
+          <i data-lucide="info" class="w-4 h-4 text-amber-700"></i>
+          A Subtle Observation on 0.9B Q4 Nuance
+        </div>
+        <p class="text-xs sm:text-sm text-amber-950 m-0 leading-relaxed">
+          In the highlighted red box above, when Pranav messaged <em>"I'm very displeased"</em>, the model evaluated formal displeasure differently than overt anger, allowing the general contact rule to alert. For a compact 0.9B model running in 4-bit quantization, distinguishing subtle negative tone from aggressive anger is a minor nuance. Across all other scenarios, emotional triage performed reliably.
+        </p>
+      </div>
+
+      <!-- 5-Day Live Benchmark Card (Follows after edge case explanation) -->
+      <div class="my-6 p-5 rounded-xl bg-emerald-50/70 border border-emerald-200 space-y-3">
+        <div class="flex items-center justify-between border-b border-emerald-200 pb-2">
+          <span class="font-bold text-emerald-900 text-sm flex items-center gap-2 font-mono">
+            <i data-lucide="check-circle-2" class="w-4 h-4 text-emerald-700"></i> Live 5-Day Daily-Driver Benchmark
+          </span>
+          <span class="text-xs font-mono text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded font-bold">> 99.8% Effective Triage</span>
+        </div>
+        
+        <div class="grid sm:grid-cols-3 gap-3 text-xs text-slate-700">
+          <div class="p-3 bg-white rounded-xl border border-emerald-100">
+            <div class="text-slate-500 font-medium">Test Duration</div>
+            <div class="text-slate-900 font-bold text-sm mt-0.5">5 Continuous Days</div>
+            <div class="text-[11px] text-slate-500">7 active natural rules</div>
+          </div>
+          <div class="p-3 bg-white rounded-xl border border-emerald-100">
+            <div class="text-slate-500 font-medium">Notification Volume</div>
+            <div class="text-slate-900 font-bold text-sm mt-0.5">~500 / Day</div>
+            <div class="text-[11px] text-slate-500">~2,500 total processed</div>
+          </div>
+          <div class="p-3 bg-white rounded-xl border border-emerald-100">
+            <div class="text-slate-500 font-medium">Edge Cases Missed</div>
+            <div class="text-slate-900 font-bold text-sm mt-0.5">Only 2–3 Total</div>
+            <div class="text-[11px] text-slate-500">Zero phone heating</div>
+          </div>
+        </div>
+
+        <p class="text-xs text-emerald-950 m-0 leading-relaxed pt-1">
+          Across ~2,500 real-world notifications from WhatsApp, Teams, Instagram, and phone calls, the app missed only 2–3 minor edge cases over 5 days, running with zero standby battery drain and zero thermal buildup.
+        </p>
+      </div>
+
+      <!-- 5. Key Takeaways -->
+      <h2>5. Key Takeaways</h2>
+
+      <p>
+        Small language models do not need to process every incoming data stream at runtime. By pairing K2 Horizon with a fast on-device classifier, we use the model where it excels—parsing human intent into structured rules—while native code handles instant execution. This gives you semantic flexibility with the battery life and thermal stability of a native app.
+      </p>
+
+    </article>
+
+    <!-- Footer -->
+    <footer class="mt-16 pt-8 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-slate-400 font-mono">
+      <div>randomwalk.ai | K2 Horizon 0.9B Q4 &amp; llama.cpp</div>
+      <div>On-Device AI Architecture</div>
+    </footer>
+
+  </main>
+
+  <script>
+    lucide.createIcons();
+
+    function downloadMarkdown() {
+      const markdownContent = `# We Put K2-Horizon 0.9B LLM on Android — Until?? Here's What Happened Next
+
+**Author:** randomwalk.ai Engineering Team  
+**Test Hardware:** 8GB RAM Android Device  
+**Model:** IFM/K2-Horizon-0.9B (4-bit Q4_K_M GGUF via llama.cpp)  
+**Branch:** k2-arch
+
+---
+
+We originally set out to test the new **K2 Horizon** model family locally. We first benchmarked both the **0.9B** and **7B** models on a 32GB RAM laptop by building a local chatbot testbed. While the 7B model delivered solid answers, its latency and memory load were noticeably heavier compared to the nimble 0.9B variant. For mobile deployment on Android, the 0.9B model was the clear contender. Given K2's strong reasoning capabilities even at smaller parameter sizes, we wanted to build a practical real-world use case—which led us to create an on-device **Notification Analyzer**.
+
+## 1. The Everyday Problem: Missing Important Notifications When We Are Busy / Work
+
+Every day, our phones get flooded with notification noise. When busy at work, in meetings, or sleeping at night, muting notifications is the easiest fix—but it comes at a cost: **you risk missing the alerts that actually matter**.
+
+We built an on-device Android notification analyzer where you define priority rules in plain English. When an alert matches your rules, **the app alerts you through a high-priority media sound chime and custom vibration—even if your phone's notification volume is muted or set to zero**. It is 100% private because everything runs locally using **K2 Horizon 0.9B**—a compact open-weights Small Language Model (SLM).
+
+---
+
+## 2. The Development Journey: Tackling the Heating Effect
+
+Deploying a language model directly on a mobile device introduces strict thermal and power constraints. Unlike a server with dedicated cooling, mobile processors quickly throttle under continuous load. Here is how the development unfolded across three iterations:
+
+| Attempt | Setup | What happened |
+|---|---|---|
+| **1** | Full precision 0.9B (~2.1 GB), inference on every notification | Loaded fine into RAM, but heavy CPU compute on each alert caused immediate phone heating and battery drain. |
+| **2** | 4-bit quantized (Q4_K_M, ~635 MB), kept resident in RAM | Reduced memory size by 70%, but continuous requests and background residency still kept the device warm during multitasking. |
+| **3** | 4-bit quantized with lazy loading (unloads when idle) | Model unloads after inactivity, reducing standby heat. Bursts of incoming alerts still triggered repeated cold-starts and inference spikes. |
+
+Each iteration improved battery efficiency, but running model inference on every incoming notification was fundamentally the wrong design for an always-on background service. That led to rethinking the entire architecture from first principles.
+
+---
+
+## 3. The Optimization: Ahead-of-Time Rule Compilation with Fast Classifier
+
+> *"For simple rules, why should an LLM run at runtime to decide if an alert is important? We can delegate easy tasks to a fast classifier."*
+
+Here is how this hybrid architecture works:
+
+1. **At Rule Creation Time:** When you add or edit a rule in natural language, K2 runs once to compile it into a structured schema containing keywords, exclusions, contacts, and apps.
+2. **Runtime Classification (<0.2 ms):** Simple rules run instantly in native memory without waking up K2, using zero model latency, zero CPU spikes, and zero heating.
+3. **Complex Semantic Rules (On-Demand):** Nuanced rules that depend on emotion or tone wake up K2 on-demand only when needed.
+
+With this setup, everyday notification filtering runs cool with zero battery drain.
+
+---
+
+## 4. Real-World Results & 5-Day Daily-Driver Benchmark
+
+### Field Observations:
+- **Active Rules Screen:** Rules categorized by K2 into Fast Contact (<0.2ms), AOT Topic Filter (<0.2ms), AOT Conditional (<0.2ms), App Filter (<0.2ms), and K2 Deep AI (On-Demand).
+- **Nuance Observation:** When Pranav messaged *"I'm very displeased"*, the model evaluated formal displeasure differently than overt anger, alerting per contact rule. Across all other scenarios, emotional triage performed reliably.
+
+### Live 5-Day Benchmark Data:
+- **Test Duration:** 5 continuous days as a daily driver (7 active rules).
+- **Notification Volume:** ~500 notifications/day (~2,500 total processed across WhatsApp, Teams, Instagram, Phone, etc.).
+- **Accuracy:** Only 2–3 minor edge cases across all 5 days (**>99.8% effective triage rate**).
+- **Efficiency:** Zero standby battery drain and zero phone heating.
+
+---
+
+## 5. Key Takeaways
+
+Small language models do not need to process every incoming data stream at runtime. By pairing K2 Horizon with a fast on-device classifier, we use the model where it excels—parsing human intent into structured rules—while native code handles instant execution. This gives you semantic flexibility with the battery life and thermal stability of a native app.
+`;
+      const blob = new Blob([markdownContent], { type: 'text/markdown;charset=utf-8;' });
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.setAttribute('download', 'k2-horizon-notification-analyzer-randomwalk.md');
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+  </script>
+</body>
+</html>

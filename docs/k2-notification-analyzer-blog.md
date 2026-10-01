@@ -1,0 +1,69 @@
+# We Put K2-Horizon 0.9B LLM on Android — Until?? Here's What Happened Next
+
+**Author:** randomwalk.ai Engineering Team  
+**Test Hardware:** 8GB RAM Android Device  
+**Model:** IFM/K2-Horizon-0.9B (4-bit Q4_K_M GGUF via llama.cpp)  
+**Branch:** `k2-arch`
+
+---
+
+We originally set out to test the new **K2 Horizon** model family locally. We first benchmarked both the **0.9B** and **7B** models on a 32GB RAM laptop by building a local chatbot testbed. While the 7B model delivered solid answers, its latency and memory load were noticeably heavier compared to the nimble 0.9B variant. For mobile deployment on Android, the 0.9B model was the clear contender. Given K2's strong reasoning capabilities even at smaller parameter sizes, we wanted to build a practical real-world use case—which led us to create an on-device **Notification Analyzer**.
+
+## 1. The Everyday Problem: Missing Important Notifications When We Are Busy / Work
+
+Every day, our phones get flooded with notification noise. When busy at work, in meetings, or sleeping at night, muting notifications is the easiest fix—but it comes at a cost: **you risk missing the alerts that actually matter**.
+
+We built an on-device Android notification analyzer where you define priority rules in plain English. When an alert matches your rules, **the app alerts you through a high-priority media sound chime and custom vibration—even if your phone's notification volume is muted or set to zero**. It is 100% private because everything runs locally using **K2 Horizon 0.9B**—a compact open-weights Small Language Model (SLM).
+
+---
+
+## 2. The Development Journey: Tackling the Heating Effect
+
+Deploying a language model directly on a mobile device introduces strict thermal and power constraints. Unlike a server with dedicated cooling, mobile processors quickly throttle under continuous load. Here is how the development unfolded across three iterations:
+
+| Attempt | Setup | What happened |
+|---|---|---|
+| **1** | Full precision 0.9B (~2.1 GB), inference on every notification | Loaded fine into RAM, but heavy CPU compute on each alert caused immediate phone heating and battery drain. |
+| **2** | 4-bit quantized (Q4_K_M, ~635 MB), kept resident in RAM | Reduced memory size by 70%, but continuous requests and background residency still kept the device warm during multitasking. |
+| **3** | 4-bit quantized with lazy loading (unloads when idle) | Model unloads after inactivity, reducing standby heat. Bursts of incoming alerts still triggered repeated cold-starts and inference spikes. |
+
+Each iteration improved battery efficiency, but running model inference on every incoming notification was fundamentally the wrong design for an always-on background service. That led to rethinking the entire architecture from first principles.
+
+---
+
+## 3. The Optimization: Ahead-of-Time Rule Compilation with Fast Classifier
+
+> *"For simple rules, why should an LLM run at runtime to decide if an alert is important? We can delegate easy tasks to a fast classifier."*
+
+Instead of treating K2 Horizon as a runtime filter that evaluates every message, we convert it into an **Ahead-of-Time (AOT) Rule Compiler**. The language model only runs when you create or edit a rule, translating plain-English intent into deterministic matching logic.
+
+![System Architecture: AI Rule Engine](/static/images/architecture_diagram.jpg)
+
+Here is how the dual-engine pipeline operates in practice:
+
+1. **At Rule Creation Time (AOT Compilation):** When you type a rule like *"if any msg from madhu it is important, if she sends reels it is not important"*, K2 processes it once. It extracts the contact name, required topic triggers, and excluded keywords into a structured JSON schema.
+2. **Fast Classifier Runtime Path (<0.2 ms):** When a notification arrives, the on-device classifier evaluates it in native memory against the compiled schema. App filters, contact lookups, and keyword exclusions are processed in less than 0.2 milliseconds with zero CPU spikes and zero thermal buildup.
+3. **Complex Semantic Rules (K2 On-Demand):** If a rule explicitly requires sentiment analysis or emotional tone (e.g. *"any message from Pranav when he is angry it is not important"*), the fast classifier routes only those specific matching messages to K2 Horizon for deep semantic reasoning.
+
+By isolating model inference to rule compilation and rare complex sentiment checks, standard daily notification triage runs entirely on lightweight native logic.
+
+---
+
+## 4. Real-World Results & 5-Day Daily-Driver Benchmark
+
+### Field Observations:
+- **Active Rules Screen:** Rules categorized by K2 into Fast Contact (<0.2ms), AOT Topic Filter (<0.2ms), AOT Conditional (<0.2ms), App Filter (<0.2ms), and K2 Deep AI (On-Demand).
+- **Nuance Observation:** When Pranav messaged *"I'm very displeased"*, the model evaluated formal displeasure differently than overt anger, alerting per contact rule. Across all other scenarios, emotional triage performed reliably.
+
+### Live 5-Day Benchmark Data:
+- **Test Duration:** 5 continuous days as a daily driver (7 active rules).
+- **Notification Volume:** ~500 notifications/day (~2,500 total processed across WhatsApp, Teams, Instagram, Phone, etc.).
+- **Accuracy:** Only 2–3 minor edge cases across all 5 days (**>99.8% effective triage rate**).
+- **Efficiency:** Zero standby battery drain and zero phone heating.
+
+---
+
+## 5. Key Takeaways
+
+Small language models do not need to process every incoming data stream at runtime. By pairing K2 Horizon with a fast on-device classifier, we use the model where it excels—parsing human intent into structured rules—while native code handles instant execution. This gives you semantic flexibility with the battery life and thermal stability of a native app.
+
