@@ -1,4 +1,4 @@
-# We Put K2-Horizon 0.9B LLM on Android: Until?? Here's What Happened Next
+# K2 Horizon Model Beats Llama 3.2 by 25%: Here’s How We Did It
 
 **Author:** randomwalk.ai Engineering Team  
 **Test Hardware:** 8GB RAM Android Device  
@@ -28,7 +28,7 @@ Deploying a language model directly on a mobile device introduces strict thermal
 
 Running model inference on every incoming notification was fundamentally the wrong design for an always-on background service. That led to rethinking the entire architecture from first principles:
 
-> *"For simple rules, why should an LLM run at runtime to decide if an alert is important? We can delegate easy tasks to a fast classifier."*
+> *"For simple rules, why should an SLM run at runtime to decide if an alert is important? We can delegate easy tasks to a fast classifier."*
 
 Instead of treating K2 Horizon as a runtime filter that evaluates every message, we convert it into an **Ahead-of-Time (AOT) Rule Compiler**. The language model only runs when you create or edit a rule, translating plain-English intent into deterministic matching logic.
 
@@ -84,5 +84,7 @@ For everyday mobile deployment on Android, a **4-bit quantized version of K2 Hor
 
 ## 5. Key Takeaways
 
-Small language models do not need to process every incoming data stream at runtime. By pairing K2 Horizon with a fast on-device classifier, we use the model where it excels at parsing human intent into structured rules, while native code handles instant execution. This gives you semantic flexibility with the battery life and thermal stability of a native app.
+By pairing K2 Horizon with a fast on-device classifier, we use the model where it excels: compiling complex human intent into structured rules ahead of time, while native code handles instant runtime execution. This architecture delivers deep semantic flexibility without sacrificing the battery life or thermal stability of the host device.
+
+Small language models do not need to process every single incoming data stream at runtime. When building on-device AI applications, the winning formula is not making the model compute faster on every event, but using compact SLMs as intelligent compilers and letting deterministic code handle the high-throughput path.
 
