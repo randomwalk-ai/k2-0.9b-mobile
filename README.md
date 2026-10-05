@@ -1,13 +1,10 @@
 # K2 Horizon: On-Device Intelligent Edge Notification Assistant
 
-[![Blog Case Study](https://img.shields.io/badge/Read_Case_Study-randomwalk.ai-10b981.svg)](https://k2-blog-randomwalk.vercel.app/)
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 [![Model](https://img.shields.io/badge/Model-IFM%2FK2--Horizon--0.9B-purple.svg)](https://huggingface.co/IFM/K2-Horizon-0.9B)
 [![Runtime](https://img.shields.io/badge/Runtime-llama.cpp_Mobile-orange.svg)](https://github.com/ggerganov/llama.cpp)
 
 An ultra-efficient, privacy-first on-device AI notification filtering and alert engine for Android powered by **K2 Horizon (0.9B)** and **llama.cpp**.
-
-Read the full engineering case study and system design on [randomwalk.ai](https://k2-blog-randomwalk.vercel.app/).
 
 ---
 
@@ -140,8 +137,6 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 ---
 
 ## Benchmarks & Performance
-
-*Source: [randomwalk.ai Engineering Case Study](https://k2-blog-randomwalk.vercel.app/)*
 
 ### 1. 500-Test-Case Stress Benchmark (K2 Horizon 0.9B vs. Llama 3.2 1B)
 
