@@ -79,7 +79,7 @@ class NotificationProcessor(
         fun isSenderMatch(ruleTarget: String?, data: NotificationData): Boolean {
             if (ruleTarget.isNullOrBlank()) return false
 
-            // 1. Direct sender from MessagingStyle (e.g. "Arjun_Vasireddy", "Madhu")
+            // 1. Direct sender from MessagingStyle (e.g. "Alice_Smith", "Bob")
             if (!data.sender.isNullOrBlank() && !data.sender.equals(data.appName, ignoreCase = true)) {
                 if (matchesPersonName(ruleTarget, data.sender)) {
                     return true
@@ -110,7 +110,7 @@ class NotificationProcessor(
                     }
                 }
 
-                // Sender prefix in text for group messages (e.g. "Madhu: Hi everyone")
+                // Sender prefix in text for group messages (e.g. "Bob: Hi everyone")
                 if (text.contains(":")) {
                     val possiblePrefix = text.substringBefore(":").trim()
                     if (possiblePrefix.length in 2..30 && !possiblePrefix.contains("\n") && !possiblePrefix.contains(".")) {
@@ -426,7 +426,7 @@ class NotificationProcessor(
                             positiveReason = "[⚡ Fast Rule] Matched '$hitAnchor' in rule: ${rule.text}"
                         }
                     } else if (isPersonRule && senderMatches && excludedTopics.isNotEmpty() && !matchesExclusion) {
-                        // Person rule with exclusions only (e.g. "Arjun not movies") and no exclusion matched!
+                        // Person rule with exclusions only (e.g. "Alice not movies") and no exclusion matched!
                         hasPositiveMatch = true
                         matchedRuleText = rule.text
                         positiveReason = "[⚡ Fast Rule] Matched: ${rule.text}"

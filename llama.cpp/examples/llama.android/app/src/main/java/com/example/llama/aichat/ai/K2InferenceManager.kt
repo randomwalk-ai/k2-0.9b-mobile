@@ -67,7 +67,7 @@ class K2InferenceManager private constructor(private val context: Context) {
         if (!internalModelsDir.exists()) internalModelsDir.mkdirs()
 
         val internalModel = File(internalModelsDir, "k2-horizon-0.9b-q4_k_m.gguf")
-        if (internalModel.exists() && internalModel.length() > 500_000_000L) {
+        if (internalModel.exists() && internalModel.length() > 50_000_000L) {
             Log.i(TAG, "Found valid internal model: ${internalModel.absolutePath} (${internalModel.length()} bytes)")
             cachedModelPath = internalModel.absolutePath
             _state.value = State.UNINITIALIZED
@@ -100,7 +100,7 @@ class K2InferenceManager private constructor(private val context: Context) {
             try {
                 file.isFile && file.canRead() &&
                 file.extension.equals("gguf", ignoreCase = true) &&
-                file.length() > 500_000_000L
+                file.length() > 50_000_000L
             } catch (e: Exception) { false }
         }
 
@@ -114,7 +114,7 @@ class K2InferenceManager private constructor(private val context: Context) {
                         input.copyTo(output)
                     }
                 }
-                if (tempFile.length() > 500_000_000L) {
+                if (tempFile.length() > 50_000_000L) {
                     if (internalModel.exists()) internalModel.delete()
                     tempFile.renameTo(internalModel)
                     Log.i(TAG, "Import completed to ${internalModel.absolutePath}")
@@ -155,10 +155,10 @@ class K2InferenceManager private constructor(private val context: Context) {
                 }
             } ?: throw IllegalStateException("Could not open URI")
 
-            if (tempFile.length() < 500_000_000L) {
+            if (tempFile.length() < 50_000_000L) {
                 val len = tempFile.length()
                 tempFile.delete()
-                throw IllegalArgumentException("Selected file is only ${len / 1024 / 1024} MB (expected ~635 MB)")
+                throw IllegalArgumentException("Selected file is only ${len / 1024 / 1024} MB (expected > 50 MB)")
             }
 
             if (internalModel.exists()) internalModel.delete()

@@ -83,17 +83,17 @@ object K2PromptBuilder {
                "Rule Intent Types:\n" +
                "- \"APP_FILTER\": Rule applies to specific mobile applications (e.g. Teams, Slack, WhatsApp, Swiggy, Uber).\n" +
                "- \"TOPIC_FILTER\": Rule applies to specific topics/keywords across all apps (e.g. OTP, gaming, delivery, job interview, server outage).\n" +
-               "- \"SIMPLE_CONTACT\": Rule applies to all messages from a specific person (e.g. \"Alice\", \"Krishna\").\n" +
-               "- \"SIMPLE_BLOCK\": Rule completely mutes/blocks all messages from a person or app (e.g. \"Block Bob\", \"Ignore Spammer\").\n" +
-               "- \"CONDITIONAL_CONTACT\": Rule applies to a person with specific topic restrictions or exclusions (e.g. \"Alice not memes\", \"Arjun related to job\").\n" +
-               "- \"CONDITIONAL_EMOTION\": Rule depends on the sender's emotional state or tone (e.g. \"Pranav when angry is not important\", \"Notify if boss sounds furious\").\n\n" +
+               "- \"SIMPLE_CONTACT\": Rule applies to all messages from a specific person (e.g. \"Alice\", \"Bob\").\n" +
+               "- \"SIMPLE_BLOCK\": Rule completely mutes/blocks all messages from a person or app (e.g. \"Block spammer\", \"Ignore promotions\").\n" +
+               "- \"CONDITIONAL_CONTACT\": Rule applies to a person with specific topic restrictions or exclusions (e.g. \"Alice not memes\", \"David related to job\").\n" +
+               "- \"CONDITIONAL_EMOTION\": Rule depends on the sender's emotional state or tone (e.g. \"Charlie when angry is not important\", \"Notify if boss sounds furious\").\n\n" +
                "Execution Engine Strategies:\n" +
                "- \"AOT_FAST\": Use for deterministic keyword, app, and contact matching that executes in <0.2ms with zero battery drain.\n" +
                "- \"K2_DEEP\": Use ONLY for rules requiring semantic emotion, tone, sentiment, or deep subjective context evaluation.\n\n" +
                "Field Specification:\n" +
                "1. \"rule_type\": One of [\"APP_FILTER\", \"TOPIC_FILTER\", \"SIMPLE_CONTACT\", \"SIMPLE_BLOCK\", \"CONDITIONAL_CONTACT\", \"CONDITIONAL_EMOTION\"]\n" +
                "2. \"execution_engine\": \"AOT_FAST\" or \"K2_DEEP\"\n" +
-               "3. \"target_person\": Lowercase name of the targeted person (e.g. \"alice\", \"pranav\", \"krishna\"), or null if none.\n" +
+               "3. \"target_person\": Lowercase name of the targeted person (e.g. \"alice\", \"bob\", \"sarah\"), or null if none.\n" +
                "4. \"target_apps\": Array of target app names in lowercase (e.g. [\"teams\"], [\"slack\"]), or [] if none.\n" +
                "5. \"action\": \"ALERT\" (makes matching notifications important) or \"MUTE\" (suppresses matching notifications).\n" +
                "6. \"positive_topics\": Array of core domain keywords that must trigger alerts. CRITICAL: Never include conversational noise words (e.g. \"msg\", \"message\", \"messages\", \"notification\", \"talking\", \"messaged\", \"someone\", \"any\", \"important\"). If a rule targets an entire app or person with no specific domain, leave positive_topics as [].\n" +
@@ -103,14 +103,14 @@ object K2PromptBuilder {
                "Few-Shot Examples:\n" +
                "Rule: \"any message from teams is important\"\n" +
                "Output: {\"rule_type\": \"APP_FILTER\", \"execution_engine\": \"AOT_FAST\", \"target_person\": null, \"target_apps\": [\"teams\"], \"action\": \"ALERT\", \"positive_topics\": [], \"excluded_topics\": [], \"semantic_condition\": null, \"summary\": \"Alert all notifications from Teams\"}\n\n" +
-               "Rule: \"any msg from krishna it is important\"\n" +
-               "Output: {\"rule_type\": \"SIMPLE_CONTACT\", \"execution_engine\": \"AOT_FAST\", \"target_person\": \"krishna\", \"target_apps\": [], \"action\": \"ALERT\", \"positive_topics\": [], \"excluded_topics\": [], \"semantic_condition\": null, \"summary\": \"Alert all messages from Krishna\"}\n\n" +
-               "Rule: \"any message from pranav when he is angry it is not important\"\n" +
-               "Output: {\"rule_type\": \"CONDITIONAL_EMOTION\", \"execution_engine\": \"K2_DEEP\", \"target_person\": \"pranav\", \"target_apps\": [], \"action\": \"MUTE\", \"positive_topics\": [], \"excluded_topics\": [], \"semantic_condition\": \"sender is angry, mad, or furious\", \"summary\": \"Mute Pranav when angry\"}\n\n" +
-               "Rule: \"if any msg from madhu it is important,if she sends reels it is not important\"\n" +
-               "Output: {\"rule_type\": \"CONDITIONAL_CONTACT\", \"execution_engine\": \"AOT_FAST\", \"target_person\": \"madhu\", \"target_apps\": [], \"action\": \"ALERT\", \"positive_topics\": [], \"excluded_topics\": [\"reels\", \"reel\", \"video\"], \"semantic_condition\": null, \"summary\": \"Alert messages from Madhu except reels\"}\n\n" +
-               "Rule: \"any msg from arjun related to job is important\"\n" +
-               "Output: {\"rule_type\": \"CONDITIONAL_CONTACT\", \"execution_engine\": \"AOT_FAST\", \"target_person\": \"arjun\", \"target_apps\": [], \"action\": \"ALERT\", \"positive_topics\": [\"job\", \"interview\", \"hiring\", \"offer\", \"recruiter\"], \"excluded_topics\": [], \"semantic_condition\": null, \"summary\": \"Alert messages from Arjun about jobs\"}\n\n" +
+               "Rule: \"any msg from alice it is important\"\n" +
+               "Output: {\"rule_type\": \"SIMPLE_CONTACT\", \"execution_engine\": \"AOT_FAST\", \"target_person\": \"alice\", \"target_apps\": [], \"action\": \"ALERT\", \"positive_topics\": [], \"excluded_topics\": [], \"semantic_condition\": null, \"summary\": \"Alert all messages from Alice\"}\n\n" +
+               "Rule: \"any message from charlie when he is angry it is not important\"\n" +
+               "Output: {\"rule_type\": \"CONDITIONAL_EMOTION\", \"execution_engine\": \"K2_DEEP\", \"target_person\": \"charlie\", \"target_apps\": [], \"action\": \"MUTE\", \"positive_topics\": [], \"excluded_topics\": [], \"semantic_condition\": \"sender is angry, mad, or furious\", \"summary\": \"Mute Charlie when angry\"}\n\n" +
+               "Rule: \"if any msg from sarah it is important,if she sends reels it is not important\"\n" +
+               "Output: {\"rule_type\": \"CONDITIONAL_CONTACT\", \"execution_engine\": \"AOT_FAST\", \"target_person\": \"sarah\", \"target_apps\": [], \"action\": \"ALERT\", \"positive_topics\": [], \"excluded_topics\": [\"reels\", \"reel\", \"video\"], \"semantic_condition\": null, \"summary\": \"Alert messages from Sarah except reels\"}\n\n" +
+               "Rule: \"any msg from david related to job is important\"\n" +
+               "Output: {\"rule_type\": \"CONDITIONAL_CONTACT\", \"execution_engine\": \"AOT_FAST\", \"target_person\": \"david\", \"target_apps\": [], \"action\": \"ALERT\", \"positive_topics\": [\"job\", \"interview\", \"hiring\", \"offer\", \"recruiter\"], \"excluded_topics\": [], \"semantic_condition\": null, \"summary\": \"Alert messages from David about jobs\"}\n\n" +
                "Rule: \"anyone msges about playing cricket it is important\"\n" +
                "Output: {\"rule_type\": \"TOPIC_FILTER\", \"execution_engine\": \"AOT_FAST\", \"target_person\": null, \"target_apps\": [], \"action\": \"ALERT\", \"positive_topics\": [\"cricket\", \"cricketing\", \"cricket match\", \"cricket game\"], \"excluded_topics\": [], \"semantic_condition\": null, \"summary\": \"Alert messages about cricket\"}\n\n" +
                "Rule: \"Mute all promotional offers and discounts from Swiggy\"\n" +
