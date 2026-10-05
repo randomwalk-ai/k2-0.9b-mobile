@@ -191,9 +191,10 @@ k2-0.9b-mobile/
 │   └── static/images/                 # System architecture and benchmark visual assets
 │
 ├── benchmarks/                        # Python evaluation datasets and benchmarks
+│   ├── run_phase2_benchmark_500.py    # 500-sample stress benchmark runner
 │   ├── benchmark_engine.py            # Automated benchmark evaluation harness
 │   ├── test_cases_500.json            # 500-sample stress benchmark dataset
-│   └── test_cases_1000.json           # Extended test dataset
+│   └── phase2_benchmark_500_results.json # Raw evaluation benchmark results
 │
 └── llama.cpp/examples/llama.android/  # Android Application & Native Engine
     ├── app/src/main/java/com/example/llama/aichat/
