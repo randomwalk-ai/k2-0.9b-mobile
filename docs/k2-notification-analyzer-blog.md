@@ -44,7 +44,7 @@ Here is how the dual-engine pipeline operates in practice:
 
 ## 3. Stress Testing & Benchmarks: K2 Horizon 0.9B vs. Llama 3.2 1B
 
-Before daily-driver deployment, we conducted rigorous stress tests across a benchmark dataset of **500 diverse test cases** covering emotions (sarcasm, passive-aggressive frustration, anger), urgent escalation, conditional exclusions, and app rules.
+Before daily-driver deployment, we conducted rigorous stress tests across a benchmark dataset of **500 diverse test cases** covering emotions (sarcasm, passive aggressive frustration, anger), urgent escalation, conditional exclusions, and app rules.
 
 ### Key Benchmark Metrics (500 Test Cases):
 - **Overall Triage Accuracy:** K2 Horizon 0.9B scored **65.8% (329/500)** vs. Llama 3.2 1B at **41.0% (205/500)** (+24.8% Higher Overall Accuracy).
@@ -53,13 +53,13 @@ Before daily-driver deployment, we conducted rigorous stress tests across a benc
 - **App & Topic Filter Routing:** K2 Horizon scored **90.0%** vs. Llama at **0.0%** (Llama failed to generate valid JSON structures for app constraints).
 
 ### Sample Stress Test Cases:
-| Case #1: Passive-Aggressive Detection | Case #2: Critical Outage Escalation |
+| Case #1: Passive Aggressive Detection | Case #2: Critical Outage Escalation |
 |---|---|
 | ![Stress Case 1](/static/images/stress_case_1_passive_aggressive.png) | ![Stress Case 2](/static/images/stress_case_2_urgent_escalation.png) |
 
-**Case Breakdown:** While both models reliably catch explicit emergency keywords like "Urgent" (Case #2), K2 Horizon 0.9B successfully identifies nuanced conversational cues like passive-aggressive frustration (Case #1) to silence unneeded alerts, where other sub-1B models misclassify dismissiveness as neutral agreement.
+**Case Breakdown:** While both models reliably catch explicit emergency keywords like "Urgent" (Case #2), K2 Horizon 0.9B successfully identifies nuanced conversational cues like passive aggressive frustration (Case #1) to silence unneeded alerts, where other sub-1B models misclassify dismissiveness as neutral agreement.
 
-Overall, K2 Horizon 0.9B proves to be the best choice for our on-device notification analyzer. As a dedicated reasoning model, its compact reasoning density and strict instruction-following allow it to reliably compile complex natural language rules into structured schemas and decipher subtle human emotions where generalist sub-1B models fall short.
+Overall, K2 Horizon 0.9B proves to be the best choice for our on-device notification analyzer. As a dedicated reasoning model, its compact reasoning density and strict instruction following allow it to reliably compile complex natural language rules into structured schemas and decipher subtle human emotions where generalist sub-1B models fall short.
 
 ---
 
