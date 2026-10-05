@@ -52,6 +52,8 @@ Before daily-driver deployment, we conducted rigorous stress tests across a benc
 - **Deep AI Emotional Nuance (250 cases):** K2 Horizon 0.9B scored **58.4%** vs. Llama 3.2 1B at **48.4%**.
 - **App & Topic Filter Routing:** K2 Horizon scored **90.0%** vs. Llama at **0.0%** (Llama failed to generate valid JSON structures for app constraints).
 
+*These results come from our internal notification-analysis benchmark and should not be interpreted as a general ranking of K2 Horizon 0.9B versus Llama 3.2 1B across language-model tasks.*
+
 ### Sample Stress Test Cases:
 | Case #1: Passive Aggressive Detection | Case #2: Critical Outage Escalation |
 |---|---|
@@ -59,7 +61,7 @@ Before daily-driver deployment, we conducted rigorous stress tests across a benc
 
 **Case Breakdown:** While both models reliably catch explicit emergency keywords like "Urgent" (Case #2), K2 Horizon 0.9B successfully identifies nuanced conversational cues like passive aggressive frustration (Case #1) to silence unneeded alerts, where other sub-1B models misclassify dismissiveness as neutral agreement.
 
-Overall, K2 Horizon 0.9B proves to be the best choice for our on-device notification analyzer. As a dedicated reasoning model, its compact reasoning density and strict instruction following allow it to reliably compile complex natural language rules into structured schemas and decipher subtle human emotions where generalist sub-1B models fall short.
+Overall, K2 Horizon 0.9B proved to be the best fit for our notification-analysis workload among the models we evaluated. As a dedicated reasoning model, its compact reasoning density and strict instruction following allow it to reliably compile complex natural language rules into structured schemas and decipher subtle human emotions where generalist sub-1B models fall short.
 
 ---
 
@@ -74,11 +76,11 @@ For everyday mobile deployment on Android, a **4-bit quantized version of K2 Hor
 - **Arjun: "I found a job opening on LinkedIn"** ➔ **🚨 Alerted (Topic: 'job')**
 - **Arjun: "Lets go to a trip" / "Watched movie?"** ➔ **🔕 Silenced (No Match)**
 
-### Live 5-Day Benchmark Data:
+### 5-Day Daily-Driver Testing:
 - **Test Duration:** 5 continuous days as a daily driver (7 active rules).
 - **Notification Volume:** ~500 notifications/day (~2,500 total processed across WhatsApp, Teams, Instagram, Phone, etc.).
-- **Accuracy:** Only 2–3 minor edge cases across all 5 days.
-- **Efficiency:** Zero standby battery drain and zero phone heating.
+- **Observations:** We observed only 2–3 minor edge cases across approximately 2,500 notifications.
+- **Efficiency:** No measurable additional standby battery drain and no noticeable thermal buildup during our 5-day test.
 
 ---
 
