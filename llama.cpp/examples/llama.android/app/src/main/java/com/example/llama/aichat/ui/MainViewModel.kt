@@ -2,10 +2,13 @@ package com.example.llama.aichat.ui
 
 import android.app.Application
 import android.content.Context
+import android.util.Log
 import androidx.core.app.NotificationManagerCompat
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.llama.aichat.ai.K2InferenceManager
+import com.example.llama.aichat.ai.K2PromptBuilder
+import com.example.llama.aichat.ai.K2ResponseParser
 import com.example.llama.aichat.data.*
 import com.example.llama.aichat.notification.NotificationSummaryManager
 import kotlinx.coroutines.Dispatchers
@@ -91,16 +94,38 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     init {
         checkNotificationAccess()
 
-        // Clean up any historical notifications exceeding maximum 7-day retention
+        // Clean up any historical notifications exceeding maximum 7-day retention and purge outbound noise
         viewModelScope.launch(Dispatchers.IO) {
             val maxCutoff = System.currentTimeMillis() - (7 * 24 * 60 * 60 * 1000L)
             notificationRepo.deleteOlderThan(maxCutoff)
+            notificationRepo.purgeOutboundNoise()
         }
 
         // Maintain persistent notification shade summary in sync with important records
         viewModelScope.launch {
             importantNotifications.collectLatest { list ->
                 summaryManager.updateSummary(list)
+            }
+        }
+
+        // Lightweight DB sanitation for existing rules (runs instantly with 0 LLM latency)
+        viewModelScope.launch(Dispatchers.IO) {
+            val existing = ruleRepo.getAllRulesSync()
+            existing.forEach { rule ->
+                val parsed = K2ResponseParser.parseCompiledRule(null, rule.text)
+                val needsUpdate = (rule.targetPerson != parsed.targetPerson) ||
+                        (rule.getTargetApps().toSet() != parsed.targetApps) ||
+                        (rule.getPositiveTopics().toSet() != parsed.positiveTopics) ||
+                        (rule.getExcludedTopics().toSet() != parsed.excludedTopics) ||
+                        (rule.semanticDepth != parsed.semanticDepth) ||
+                        (rule.ruleIntent != parsed.intent.name) ||
+                        (rule.action != parsed.action) ||
+                        rule.isCompiling
+                if (needsUpdate) {
+                    val updated = parsed.toNotificationRule(id = rule.id, enabled = rule.enabled).copy(isCompiling = false)
+                    ruleRepo.update(updated)
+                    Log.i("MainViewModel", "Sanitized existing rule #${rule.id} ('${rule.text}'): intent=${updated.ruleIntent}, person=${updated.targetPerson}, action=${updated.action}, topics=${updated.positiveTopicsJson}, excluded=${updated.excludedTopicsJson}")
+                }
             }
         }
     }
@@ -160,14 +185,49 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun addRule(text: String) {
-        viewModelScope.launch {
-            ruleRepo.insert(NotificationRule(text = text.trim()))
+        viewModelScope.launch(Dispatchers.IO) {
+            val initialParsed = K2ResponseParser.parseCompiledRule(null, text.trim())
+            val initialRule = initialParsed.toNotificationRule(id = 0L, enabled = true).copy(isCompiling = true)
+            val insertedId = ruleRepo.insert(initialRule)
+            compileRuleWithK2(insertedId, text.trim())
         }
     }
 
     fun updateRule(rule: NotificationRule, newText: String) {
-        viewModelScope.launch {
-            ruleRepo.update(rule.copy(text = newText.trim(), updatedAt = System.currentTimeMillis()))
+        viewModelScope.launch(Dispatchers.IO) {
+            val initialParsed = K2ResponseParser.parseCompiledRule(null, newText.trim())
+            val updated = initialParsed.toNotificationRule(id = rule.id, enabled = rule.enabled).copy(
+                isCompiling = true,
+                updatedAt = System.currentTimeMillis()
+            )
+            ruleRepo.update(updated)
+            compileRuleWithK2(rule.id, newText.trim())
+        }
+    }
+
+    private suspend fun compileRuleWithK2(ruleId: Long, rawText: String) {
+        try {
+            val inferenceManager = K2InferenceManager.getInstance(getApplication())
+            val prompt = K2PromptBuilder.buildRuleCompilationPrompt(rawText)
+            val response = inferenceManager.analyze(prompt)
+            if (!response.isNullOrBlank()) {
+                val compiled = K2ResponseParser.parseCompiledRule(response, rawText)
+                if (compiled != null) {
+                    val existing = ruleRepo.getRuleById(ruleId)
+                    val isEnabled = existing?.enabled ?: true
+                    val finalRule = compiled.toNotificationRule(id = ruleId, enabled = isEnabled).copy(isCompiling = false)
+                    ruleRepo.update(finalRule)
+                    Log.i("MainViewModel", "Rule #$ruleId compiled via K2: intent=${finalRule.ruleIntent}, depth=${finalRule.semanticDepth}, apps=${finalRule.targetAppsJson}, topics=${finalRule.positiveTopicsJson}")
+                    return
+                }
+            }
+        } catch (e: Exception) {
+            Log.w("MainViewModel", "K2 rule compilation exception: ${e.message}")
+        }
+        // Fallback: clear compiling flag if model was not available
+        val existing = ruleRepo.getRuleById(ruleId)
+        if (existing != null && existing.isCompiling) {
+            ruleRepo.update(existing.copy(isCompiling = false))
         }
     }
 

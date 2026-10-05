@@ -33,3 +33,5 @@ local.properties
 *.exe
 *.tmp
 *.log
+.vercel/
+scratch_visuals/

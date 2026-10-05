@@ -5,12 +5,20 @@ import kotlinx.coroutines.flow.Flow
 class NotificationRuleRepository(private val ruleDao: NotificationRuleDao) {
     val allRules: Flow<List<NotificationRule>> = ruleDao.getAllRules()
 
+    suspend fun getAllRulesSync(): List<NotificationRule> {
+        return ruleDao.getAllRulesSync()
+    }
+
     suspend fun getEnabledRules(): List<NotificationRule> {
         return ruleDao.getEnabledRules()
     }
 
-    suspend fun insert(rule: NotificationRule) {
-        ruleDao.insert(rule)
+    suspend fun getRuleById(id: Long): NotificationRule? {
+        return ruleDao.getRuleById(id)
+    }
+
+    suspend fun insert(rule: NotificationRule): Long {
+        return ruleDao.insert(rule)
     }
 
     suspend fun update(rule: NotificationRule) {
