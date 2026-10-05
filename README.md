@@ -117,7 +117,7 @@ Run directly from your terminal:
 
 ```bash
 # Clone the repository
-git clone -b k2-arch https://github.com/ritvikrw/k2-0.9b-mobile.git
+git clone https://github.com/randomwalk-ai/k2-0.9b-mobile.git
 cd k2-0.9b-mobile/llama.cpp/examples/llama.android
 
 # Build the APK
