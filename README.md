@@ -112,33 +112,25 @@ adb push k2-horizon-0.9b-q4_k_m.gguf /sdcard/Download/
 
 ---
 
-## Building & Installing the App
+## Installation & Quick Start
 
-### Requirements
-- **Android Studio** (Recommended: Hedgehog / Ladybug or newer)
-- **NDK & CMake** (Android Studio will automatically prompt to install them if missing, or install via `SDK Manager > SDK Tools > NDK & CMake`)
+### 1. Build & Install APK
 
----
+Run directly from your terminal:
 
-### Quick Build & Run
-
-#### Option 1: Using Android Studio (Easiest)
-1. Open Android Studio and select **Open Project**.
-2. Navigate to `llama.cpp/examples/llama.android` and click **Open**.
-3. Let Gradle sync and click the green **Run ▶** button to install on your connected phone.
-
-#### Option 2: Command Line (Terminal / ADB)
 ```bash
-# 1. Clone repository
+# Clone the repository
 git clone -b k2-arch https://github.com/ritvikrw/k2-0.9b-mobile.git
 cd k2-0.9b-mobile/llama.cpp/examples/llama.android
 
-# 2. Build APK
+# Build the APK
 ./gradlew assembleDebug
 
-# 3. Install on connected phone
+# Install on your connected Android device
 adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```
+
+*(Alternatively, open the project in Android Studio and click **Run ▶**)*
 
 ### Initial Device Permissions
 1. Open **K2 Horizon** on your Android device.
