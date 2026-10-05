@@ -185,6 +185,11 @@ Tested on a physical **8GB RAM Android device** under regular daily use:
 k2-0.9b-mobile/
 ├── README.md
 ├── LICENSE
+├── deploy_post/                       # Web blog static deployment bundle
+│   ├── index.html                     # Case study article & interactive post
+│   ├── vercel.json                    # Deployment routing config
+│   └── static/images/                 # System architecture and benchmark visual assets
+│
 ├── benchmarks/                        # Python evaluation datasets and benchmarks
 │   ├── benchmark_engine.py            # Automated benchmark evaluation harness
 │   ├── test_cases_500.json            # 500-sample stress benchmark dataset
