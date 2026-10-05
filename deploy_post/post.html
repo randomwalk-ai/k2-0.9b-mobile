@@ -33,7 +33,7 @@
 
   <!-- Google Fonts: Newsreader, Plus Jakarta Sans, JetBrains Mono -->
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.gstatic.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 
   <!-- Lucide Icons -->
   <script src="https://unpkg.com/lucide@latest"></script>
@@ -574,6 +574,34 @@
         Small language models do not need to process every single incoming data stream at runtime. When building on-device AI applications, the winning formula is not making the model compute faster on every event, but using compact SLMs as intelligent compilers and letting deterministic code handle the high-throughput path.
       </p>
 
+      <!-- Open Source GitHub Repository Card -->
+      <div class="my-10 p-6 sm:p-7 rounded-2xl bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white shadow-xl border border-slate-700/70 relative overflow-hidden">
+        <!-- Subtle ambient light background -->
+        <div class="absolute -right-10 -bottom-10 w-44 h-44 bg-emerald-500/15 rounded-full blur-3xl pointer-events-none"></div>
+        <div class="absolute -left-10 -top-10 w-36 h-36 bg-indigo-500/10 rounded-full blur-2xl pointer-events-none"></div>
+        
+        <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6 relative z-10">
+          <div class="space-y-2">
+            <div class="flex items-center gap-2 text-emerald-400 text-xs font-mono font-semibold uppercase tracking-wider">
+              <i data-lucide="github" class="w-4 h-4 text-emerald-400"></i>
+              <span>Open Source on GitHub</span>
+            </div>
+            <h3 class="text-xl sm:text-2xl font-bold text-white m-0 tracking-tight font-sans">
+              randomwalk-ai / k2-0.9b-mobile
+            </h3>
+            <p class="text-xs sm:text-sm text-slate-300 m-0 leading-relaxed max-w-lg">
+              Explore the complete Android app, Ahead-of-Time rule compiler, llama.cpp mobile runtime, and our 500-case evaluation benchmark dataset.
+            </p>
+          </div>
+
+          <a href="https://github.com/randomwalk-ai/k2-0.9b-mobile" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-2 text-xs sm:text-sm font-semibold text-slate-900 bg-white hover:bg-emerald-50 hover:text-emerald-950 px-5 py-3 rounded-xl shadow-md transition-all duration-200 hover:scale-[1.03] shrink-0 font-sans border border-transparent">
+            <i data-lucide="github" class="w-4 h-4 text-slate-900"></i>
+            <span>View Repository</span>
+            <i data-lucide="external-link" class="w-3.5 h-3.5 text-slate-500"></i>
+          </a>
+        </div>
+      </div>
+
     </article>
 
     <!-- Footer -->
@@ -675,6 +703,13 @@ For everyday mobile deployment on Android, a **4-bit quantized version of K2 Hor
 By pairing K2 Horizon with a fast on-device classifier, we use the model where it excels: compiling complex human intent into structured rules ahead of time, while native code handles instant runtime execution. This architecture delivers deep semantic flexibility without sacrificing the battery life or thermal stability of the host device.
 
 Small language models do not need to process every single incoming data stream at runtime. When building on-device AI applications, the winning formula is not making the model compute faster on every event, but using compact SLMs as intelligent compilers and letting deterministic code handle the high-throughput path.
+
+---
+
+## 🔗 Open Source Repository
+
+The complete Android application, Ahead-of-Time rule compiler, llama.cpp mobile runtime, and 500-sample evaluation benchmark are available on GitHub:  
+👉 **[https://github.com/randomwalk-ai/k2-0.9b-mobile](https://github.com/randomwalk-ai/k2-0.9b-mobile)**
 `;
       const blob = new Blob([markdownContent], { type: 'text/markdown;charset=utf-8;' });
       const link = document.createElement('a');
