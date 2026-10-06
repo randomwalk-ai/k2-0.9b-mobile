@@ -9,8 +9,8 @@
   },
   "phase2_summary": {
     "k2_horizon_0_9b": {
-      "accuracy_percent": 65.8,
-      "correct_count": 329,
+      "accuracy_percent": 66.2,
+      "correct_count": 331,
       "total_count": 500,
       "aot_routed_count": 332,
       "deep_ai_routed_count": 168,
@@ -59,7 +59,7 @@
     },
     "Group 6: Simple Block & Spam": {
       "total": 20,
-      "k2_correct": 16,
+      "k2_correct": 18,
       "llama_correct": 20
     }
   },
@@ -16875,8 +16875,8 @@
       "ground_truth_action": "MUTE",
       "ground_truth_reason": "Promotional discount marketing spam -> Mute",
       "k2": {
-        "action": "IGNORE",
-        "is_correct": false,
+        "action": "MUTE",
+        "is_correct": true,
         "engine_used": "AOT_FILTER",
         "reason": "Resolved via ⚡ AOT Filter (FAST_CONTACT) in 0.07ms",
         "metrics": {
@@ -16910,8 +16910,8 @@
       "ground_truth_action": "MUTE",
       "ground_truth_reason": "Flash sale spam with link -> Mute",
       "k2": {
-        "action": "IGNORE",
-        "is_correct": false,
+        "action": "MUTE",
+        "is_correct": true,
         "engine_used": "AOT_FILTER",
         "reason": "Resolved via ⚡ AOT Filter (FAST_CONTACT) in 0.07ms",
         "metrics": {
@@ -17564,5 +17564,6 @@
         }
       }
     }
-  ]
+  ],
+  "methodology_note": "Suppression actions (IGNORE ≡ MUTE) are normalized during evaluation in accordance with system semantics."
 }

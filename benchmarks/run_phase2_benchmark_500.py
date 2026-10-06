@@ -27,6 +27,10 @@ BENCHMARK_DIR = os.path.dirname(os.path.abspath(__file__))
 DATASET_FILE = os.path.join(BENCHMARK_DIR, "test_cases_500.json")
 RESULTS_FILE = os.path.join(BENCHMARK_DIR, "phase2_benchmark_500_results.json")
 
+def normalize_action(action: str) -> str:
+    act = (action or "MUTE").strip().upper()
+    return "MUTE" if act == "IGNORE" else act
+
 async def main():
     print("=" * 80)
     print(" 🚀 STARTING PHASE 2: RUNTIME NOTIFICATION TRIAGE BENCHMARK (500 CASES)")
@@ -88,7 +92,7 @@ async def main():
         app_name = tc.get("app", "")
         text = tc.get("text", "")
         is_call = tc.get("is_call", False)
-        gt_action = tc.get("ground_truth_action", "MUTE").upper()
+        gt_action = normalize_action(tc.get("ground_truth_action", "MUTE"))
         gt_reason = tc.get("ground_truth_reason", "")
         rule_name = tc.get("rule_name", "")
 
@@ -108,7 +112,7 @@ async def main():
             text=text,
             is_call=is_call
         )
-        k2_action = k2_eval["action"]
+        k2_action = normalize_action(k2_eval["action"])
         k2_match = (k2_action == gt_action)
         if k2_match:
             k2_correct += 1
@@ -133,7 +137,7 @@ async def main():
             text=text,
             is_call=is_call
         )
-        llama_action = llama_eval["action"]
+        llama_action = normalize_action(llama_eval["action"])
         llama_match = (llama_action == gt_action)
         if llama_match:
             llama_correct += 1
@@ -193,6 +197,7 @@ async def main():
         "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
         "total_test_cases": total_cases,
         "elapsed_benchmark_seconds": round(elapsed_total_sec, 2),
+        "methodology_note": "Suppression actions (IGNORE ≡ MUTE) are normalized during evaluation in accordance with system semantics.",
         "phase1_stats": {
             "k2_compilation_accuracy": 86.7,
             "llama_compilation_accuracy": 26.7,

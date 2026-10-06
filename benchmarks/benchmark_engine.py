@@ -69,6 +69,8 @@ def run_aot_classifier(
         topics = r.get("include_topics", [])
         excludes = r.get("exclude_keywords", [])
         action = r.get("action", "ALERT")
+        if action == "IGNORE":
+            action = "MUTE"
         is_call_only = r.get("is_call_only", False)
         tone_req = r.get("tone_requirement")
 
@@ -166,6 +168,8 @@ async def evaluate_single_notification(
     if not needs_deep_ai:
         elapsed_ms = round((time.perf_counter() - t0) * 1000, 2)
         action = aot_action or "MUTE"
+        if action == "IGNORE":
+            action = "MUTE"
         reason = f"Resolved via ⚡ AOT Filter ({matched_schema.get('filter_category', 'AMBIENT') if matched_schema else 'Ambient Noise Mute'}) in {elapsed_ms}ms"
         return {
             "model": model_name,

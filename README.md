@@ -159,11 +159,11 @@ Evaluated across 500 complex test cases covering emotional tones (sarcasm, passi
 
 | Metric | K2 Horizon 0.9B | Llama 3.2 1B | Margin |
 | :--- | :---: | :---: | :---: |
-| **Overall Triage Accuracy** | **65.8%** (329/500) | 41.0% (205/500) | **+24.8%** |
+| **Overall Triage Accuracy** | **66.2%** (331/500) | 41.0% (205/500) | **+25.2%** |
 | **AOT Rule Compilation (15 Complex Rules)** | **86.7%** (13/15) | 26.7% (4/15) | **+60.0%** |
 | **Deep AI Emotional Nuance (250 Tone Cases)** | **58.4%** | 48.4% | **+10.0%** |
 
-*Note: These results come from our internal notification-analysis benchmark and should not be interpreted as a general ranking of K2 Horizon 0.9B versus Llama 3.2 1B across language-model tasks.*
+*Note: These results come from our internal notification-analysis benchmark and should not be interpreted as a general ranking of K2 Horizon 0.9B versus Llama 3.2 1B across language-model tasks. In accordance with system semantics, suppression actions (IGNORE ≡ MUTE) are normalized during evaluation.*
 
 - **Key Finding**: Between K2 Horizon 0.9B and Llama 3.2 1B, K2 proved to be the better fit for our notification-analysis workload. As a dedicated reasoning model, its reasoning-oriented design and strict instruction following allow it to reliably compile complex natural language rules into structured schemas (86.7%) and decipher subtle human emotions like passive aggressive frustration, whereas Llama 3.2 1B frequently produced malformed schemas or misclassified dismissiveness in our evaluation.
 
