@@ -24,7 +24,7 @@ import model_engine
 import benchmark_engine
 
 BENCHMARK_DIR = os.path.dirname(os.path.abspath(__file__))
-DATASET_FILE = os.path.join(BENCHMARK_DIR, "test_cases_500.json") if os.path.exists(os.path.join(BENCHMARK_DIR, "test_cases_500.json")) else "test_cases_500.json"
+DATASET_FILE = os.path.join(BENCHMARK_DIR, "test_cases_500.json")
 RESULTS_FILE = os.path.join(BENCHMARK_DIR, "phase2_benchmark_500_results.json")
 
 async def main():

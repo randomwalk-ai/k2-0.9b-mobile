@@ -11,8 +11,6 @@ import model_engine
 # Load Phase 1 compiled rules
 BENCHMARK_DIR = os.path.dirname(os.path.abspath(__file__))
 COMPILED_RULES_FILE = os.path.join(BENCHMARK_DIR, "compiled_rules_phase1.json")
-if not os.path.exists(COMPILED_RULES_FILE):
-    COMPILED_RULES_FILE = "compiled_rules_phase1.json"
 COMPILED_RULES = []
 if os.path.exists(COMPILED_RULES_FILE):
     try:

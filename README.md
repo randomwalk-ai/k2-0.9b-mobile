@@ -169,7 +169,9 @@ Evaluated across 500 complex test cases covering emotional tones (sarcasm, passi
 
 #### Reproducing the 500-Case Benchmark
 
-To run the 500-case evaluation suite from a fresh clone:
+The repository includes the exact Phase 1 compiled-rule artifact ([`benchmarks/compiled_rules_phase1.json`](benchmarks/compiled_rules_phase1.json)) used by the Phase 2 runtime benchmark.
+
+To reproduce the published 500-case evaluation results from a clean checkout, run the following commands from the repository root:
 
 ```bash
 # 1. Install benchmark dependencies
@@ -178,7 +180,7 @@ pip install torch transformers llama-cpp-python
 # 2. Download the Llama 3.2 1B Instruct GGUF model into the repository root (K2 Horizon downloads automatically from Hugging Face)
 huggingface-cli download lmstudio-community/Llama-3.2-1B-Instruct-GGUF Llama-3.2-1B-Instruct-bf16.gguf --local-dir ./
 
-# 3. Run the Phase 2 benchmark runner
+# 3. Run the Phase 2 benchmark runner from the repository root
 python benchmarks/run_phase2_benchmark_500.py
 ```
 
