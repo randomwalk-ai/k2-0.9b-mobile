@@ -69,14 +69,14 @@ Everything runs **100% locally on-device**: zero cloud API calls, zero telemetry
 
 ### Ahead-of-Time (AOT) Rule Compilation Architecture
 
-Running model inference on every incoming notification was fundamentally the wrong design for an always-on mobile service. To eliminate battery drain and device heating, K2 Horizon acts as an **Ahead-of-Time (AOT) Rule Compiler**:
+Running model inference on every incoming notification was fundamentally the wrong design for an always-on mobile service. To eliminate battery drain and device heating, K2 Horizon acts as an **Ahead-of-Time (AOT) Rule Compiler**. The language model primarily runs when you create or edit a rule, translating plain-English intent into deterministic matching logic, with on-demand inference for rules that require semantic reasoning:
 
 1. **1. Add a Rule (AOT Compilation)**:
    - When you write a rule in plain English (e.g., *"if any msg from madhu it is important, if she sends reels it is not important"*), K2 Horizon reads it **once**.
    - It compiles the natural language intent into a structured JSON schema and saves it as either a **Simple Rule** or a **Complex Rule**.
 2. **2. Notification Arrives (AI Rule Engine)**:
    - **Simple Rules (Apps, Names, Keywords, Exclusions)**: Evaluated instantly by the **Fast Classifier (`<0.2 ms`)** in native memory with zero heat and zero battery drain.
-   - **Complex Rules (Tone, Emotion, Context)**: If and only if a rule requires sentiment or emotional nuance (e.g., *"Charlie when angry is not important"*), the notification is routed to **K2 Horizon AI** on-demand for deep reasoning.
+   - **Complex Rules (Tone, Emotion, Context)**: If and only if a rule requires sentiment or emotional nuance (e.g., *"any message from pranav when he his angry it is not important"*), the notification is routed to **K2 Horizon AI** on-demand for deep reasoning.
 3. **3. Result & Action**:
    - **High-Priority Alert**: Triggers a sound chime and custom vibration even if phone notification volume is muted or set to zero.
    - **Silence Quietly**: Silences non-priority notifications without interruption.
@@ -155,7 +155,7 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 
 ### 1. 500-Test-Case Stress Benchmark (K2 Horizon 0.9B vs. Llama 3.2 1B)
 
-Evaluated across 500 complex test cases covering emotional tones (sarcasm, passive aggressive frustration, hostility), urgent escalations, conditional exclusions, and multi-app rules:
+Evaluated across 500 complex test cases covering emotional tones (sarcasm, passive aggressive frustration, anger), urgent escalations, conditional exclusions, and app-specific rules. The reported accuracy reflects end-to-end performance of our notification-analysis pipeline using each model’s compiled rules, deterministic matching, and semantic escalation where applicable.
 
 | Metric | K2 Horizon 0.9B | Llama 3.2 1B | Margin |
 | :--- | :---: | :---: | :---: |
@@ -165,7 +165,7 @@ Evaluated across 500 complex test cases covering emotional tones (sarcasm, passi
 
 *Note: These results come from our internal notification-analysis benchmark and should not be interpreted as a general ranking of K2 Horizon 0.9B versus Llama 3.2 1B across language-model tasks.*
 
-- **Key Finding**: K2 Horizon 0.9B reliably generates structured JSON schemas for multi-clause rules and accurately detects subtle conversational cues like passive aggressive frustration to silence unneeded alerts, whereas standard sub-1B models frequently produce malformed schemas or misclassify dismissiveness.
+- **Key Finding**: Between K2 Horizon 0.9B and Llama 3.2 1B, K2 proved to be the better fit for our notification-analysis workload. As a dedicated reasoning model, its reasoning-oriented design and strict instruction following allow it to reliably compile complex natural language rules into structured schemas (86.7%) and decipher subtle human emotions like passive aggressive frustration where Llama 3.2 1B falls short or misclassifies dismissiveness as neutral agreement.
 
 ---
 
@@ -188,7 +188,7 @@ Tested on a physical **8GB RAM Android device** under regular daily use:
 | **`Fast Contact`** | Fast Classifier (`<0.2ms`) | *"if pranav calls me it is important"* |
 | **`AOT Topic Filter`** | Fast Classifier (`<0.2ms`) | *"anyone msges about playing cricket it is important"* |
 | **`AOT Conditional`** | Fast Classifier (`<0.2ms`) | *"if any msg from madhu it is important, if she sends reels it is not important"* |
-| **`Deep AI Emotion`** | K2 Horizon AI (`On-Demand`) | *"Charlie when angry is not important"*, *"Alert if boss sounds furious"* |
+| **`Deep AI Emotion`** | K2 Horizon AI (`On-Demand`) | *"any message from pranav when he his angry it is not important"*, *"Alert if boss sounds furious"* |
 
 ---
 
