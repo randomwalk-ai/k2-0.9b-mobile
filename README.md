@@ -39,7 +39,7 @@ Everything runs **100% locally on-device**: zero cloud API calls, zero telemetry
                            │                       │
                            ▼                       ▼
             ┌─────────────────────────────┐ ┌─────────────────────────────┐
-            │   AOT Fast Pattern Engine   │ │     K2 Horizon 0.9B LLM     │
+            │   AOT Fast Pattern Engine   │ │     K2 Horizon 0.9B SLM     │
             │  - Keyword & Contact Match  │ │   (llama.cpp 4-bit Engine)  │
             │  - App Domain Classification│ │  - Emotion / Tone Analysis  │
             │  - Exclusion Hierarchy Rules│ │  - Deep Semantic Reasoning │
@@ -55,7 +55,7 @@ Everything runs **100% locally on-device**: zero cloud API calls, zero telemetry
 
 ### Dual-Tier Hybrid Execution Pipeline
 
-Running full LLM inference on every single incoming notification introduces severe mobile battery drain and thermal throttling. To solve this, K2 Horizon uses an **Ahead-of-Time (AOT) Rule Compiler architecture**:
+Running full SLM inference on every single incoming notification introduces severe mobile battery drain and thermal throttling. To solve this, K2 Horizon uses an **Ahead-of-Time (AOT) Rule Compiler architecture**:
 
 1. **At Rule Creation Time (AOT Compilation)**:
    - When you enter a natural rule (e.g., *"if any msg from Sarah it is important, if she sends reels it is not important"*), K2 Horizon runs **once**.
@@ -147,20 +147,21 @@ Evaluated across 500 complex test cases covering emotional tones (sarcasm, passi
 | **Overall Triage Accuracy** | **65.8%** (329/500) | 41.0% (205/500) | **+24.8%** |
 | **AOT Rule Compilation (15 Complex Rules)** | **86.7%** (13/15) | 26.7% (4/15) | **+60.0%** |
 | **Deep AI Emotional Nuance (250 Tone Cases)** | **58.4%** | 48.4% | **+10.0%** |
-| **App & Topic Filter Schema Routing** | **90.0%** | 0.0% | **+90.0%** |
 
-- **Key Finding**: K2 Horizon 0.9B reliably generates structured JSON schemas for multi-clause rules and accurately detects subtle conversational cues like passive-aggressive frustration to silence unneeded alerts, whereas standard sub-1B models frequently produce malformed schemas or misclassify dismissiveness.
+*Note: These results come from our internal notification-analysis benchmark and should not be interpreted as a general ranking of K2 Horizon 0.9B versus Llama 3.2 1B across language-model tasks.*
+
+- **Key Finding**: K2 Horizon 0.9B reliably generates structured JSON schemas for multi-clause rules and accurately detects subtle conversational cues like passive aggressive frustration to silence unneeded alerts, whereas standard sub-1B models frequently produce malformed schemas or misclassify dismissiveness.
 
 ---
 
-### 2. Live 5-Day Daily-Driver Benchmark
+### 2. 5-Day Daily-Driver Testing
 
 Tested on a physical **8GB RAM Android device** under regular daily use:
 
 - **Test Duration**: 5 Continuous Days with 7 active natural language rules.
 - **Notification Volume**: ~500 notifications/day (~2,500 total processed from WhatsApp, Microsoft Teams, Slack, Instagram, and phone calls).
-- **Edge Cases Missed**: Only 2–3 minor edge cases across all ~2,500 notifications.
-- **Thermals & Battery**: Zero standby battery drain and zero thermal buildup due to native AOT execution.
+- **Observations**: We observed only 2–3 minor edge cases across approximately 2,500 notifications.
+- **Thermals & Battery**: No measurable additional standby battery drain and no noticeable thermal buildup during our 5-day test.
 - **Latency**: `< 0.2 ms` for deterministic rules; `~150–300 ms` for on-demand deep reasoning.
 
 ---

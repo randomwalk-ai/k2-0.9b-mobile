@@ -35,3 +35,4 @@ local.properties
 *.log
 .vercel/
 scratch_visuals/
+.vercel
