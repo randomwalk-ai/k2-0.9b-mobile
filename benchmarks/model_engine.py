@@ -1,7 +1,7 @@
 """
 Model Engine for Side-by-Side Model Comparison at /test
 Models:
-1. K2-Horizon-0.9B-BF16 (Local PyTorch / Transformers bfloat16)
+1. K2-Horizon-0.9B FP32 (CPU) (Local PyTorch / Transformers FP32)
 2. Llama-3.2-1B-Instruct-BF16 (Local llama.cpp / GGUF)
 
 Pure model runner: Takes rule and notification, formats prompt, and runs local models.
@@ -148,9 +148,9 @@ class ModelEngine:
     def get_models_status(self) -> Dict[str, Any]:
         return {
             "k2_0_9b": {
-                "name": "K2 Horizon 0.9B BF16",
+                "name": "K2 Horizon 0.9B FP32 (CPU)",
                 "tag": K2_MODEL_ID,
-                "backend": "PyTorch / Transformers (bfloat16)",
+                "backend": "PyTorch / Transformers (FP32 CPU)",
                 "loaded": self.k2_loaded,
                 "cores": num_cores
             },
@@ -364,7 +364,7 @@ class ModelEngine:
 
         yield {
             "type": "final",
-            "model": "K2-Horizon-0.9B-BF16",
+            "model": "K2-Horizon-0.9B-FP32-CPU",
             "raw_output": full_text,
             "parsed_json": parsed_json,
             "is_valid_json": is_valid_json,
