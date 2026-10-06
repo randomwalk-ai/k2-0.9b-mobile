@@ -53,6 +53,13 @@ except Exception:
 
 K2_MODEL_ID = "IFM/K2-Horizon-0.9B"
 LLAMA_GGUF_PATH = "Llama-3.2-1B-Instruct-bf16.gguf"
+if not os.path.exists(LLAMA_GGUF_PATH):
+    candidate_root = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "Llama-3.2-1B-Instruct-bf16.gguf")
+    candidate_bench = os.path.join(os.path.dirname(os.path.abspath(__file__)), "Llama-3.2-1B-Instruct-bf16.gguf")
+    if os.path.exists(candidate_root):
+        LLAMA_GGUF_PATH = candidate_root
+    elif os.path.exists(candidate_bench):
+        LLAMA_GGUF_PATH = candidate_bench
 
 # The 15 stress-testing rule strings provided by the user
 PRELOADED_RULES = [

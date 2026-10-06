@@ -9,11 +9,14 @@ from typing import Dict, Any, List, Optional, Tuple
 import model_engine
 
 # Load Phase 1 compiled rules
-COMPILED_RULES_FILE = "compiled_rules_phase1.json"
+BENCHMARK_DIR = os.path.dirname(os.path.abspath(__file__))
+COMPILED_RULES_FILE = os.path.join(BENCHMARK_DIR, "compiled_rules_phase1.json")
+if not os.path.exists(COMPILED_RULES_FILE):
+    COMPILED_RULES_FILE = "compiled_rules_phase1.json"
 COMPILED_RULES = []
 if os.path.exists(COMPILED_RULES_FILE):
     try:
-        with open(COMPILED_RULES_FILE, "r", encoding="utf-8") as f:
+        with open(COMPILED_RULES_FILE, "r", encoding="utf-8-sig") as f:
             COMPILED_RULES = json.load(f)
     except Exception as e:
         print(f"[BenchmarkEngine] Error loading compiled rules: {e}")

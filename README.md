@@ -167,6 +167,21 @@ Evaluated across 500 complex test cases covering emotional tones (sarcasm, passi
 
 - **Key Finding**: Between K2 Horizon 0.9B and Llama 3.2 1B, K2 proved to be the better fit for our notification-analysis workload. As a dedicated reasoning model, its reasoning-oriented design and strict instruction following allow it to reliably compile complex natural language rules into structured schemas (86.7%) and decipher subtle human emotions like passive aggressive frustration where Llama 3.2 1B falls short or misclassifies dismissiveness as neutral agreement.
 
+#### Reproducing the 500-Case Benchmark
+
+To run the 500-case evaluation suite from a fresh clone:
+
+```bash
+# 1. Install benchmark dependencies
+pip install torch transformers llama-cpp-python
+
+# 2. Download the Llama 3.2 1B Instruct GGUF model into the repository root (K2 Horizon downloads automatically from Hugging Face)
+huggingface-cli download lmstudio-community/Llama-3.2-1B-Instruct-GGUF Llama-3.2-1B-Instruct-bf16.gguf --local-dir ./
+
+# 3. Run the Phase 2 benchmark runner
+python benchmarks/run_phase2_benchmark_500.py
+```
+
 ---
 
 ### 2. 5-Day Daily-Driver Testing
@@ -206,6 +221,7 @@ k2-0.9b-mobile/
 ├── benchmarks/                        # 500-sample benchmark evaluation suite
 │   ├── run_phase2_benchmark_500.py    # 500-sample stress benchmark runner
 │   ├── benchmark_engine.py            # Automated benchmark evaluation harness
+│   ├── compiled_rules_phase1.json     # Phase 1 compiled rule schemas for K2 & Llama
 │   ├── test_cases_500.json            # 500-sample stress benchmark dataset
 │   └── phase2_benchmark_500_results.json # Raw evaluation benchmark results
 │

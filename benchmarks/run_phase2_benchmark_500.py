@@ -23,8 +23,9 @@ warnings.filterwarnings("ignore")
 import model_engine
 import benchmark_engine
 
-DATASET_FILE = "test_cases_500.json"
-RESULTS_FILE = "phase2_benchmark_500_results.json"
+BENCHMARK_DIR = os.path.dirname(os.path.abspath(__file__))
+DATASET_FILE = os.path.join(BENCHMARK_DIR, "test_cases_500.json") if os.path.exists(os.path.join(BENCHMARK_DIR, "test_cases_500.json")) else "test_cases_500.json"
+RESULTS_FILE = os.path.join(BENCHMARK_DIR, "phase2_benchmark_500_results.json")
 
 async def main():
     print("=" * 80)
