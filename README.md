@@ -14,7 +14,7 @@ Every day, phones are flooded with notification noise. When busy at work, in mee
 
 **K2 Horizon Notification Assistant** allows users to define priority rules in natural plain English. When an incoming notification matches your criteria, the app triggers a **high-priority media sound chime and custom vibration—even if your phone's notification volume is muted or set to zero**. 
 
-Everything runs **100% locally on-device**: zero cloud API calls, zero telemetry, and zero privacy compromise.
+Everything runs **100% locally on-device**: zero cloud API calls, zero telemetry, and zero privacy compromise. Furthermore, sensitive notification history stored locally is excluded from Android Auto Backup / cloud backup and device-to-device transfer through explicit app backup rules.
 
 ---
 
@@ -165,7 +165,7 @@ Evaluated across 500 complex test cases covering emotional tones (sarcasm, passi
 
 *Note: These results come from our internal notification-analysis benchmark and should not be interpreted as a general ranking of K2 Horizon 0.9B versus Llama 3.2 1B across language-model tasks.*
 
-- **Key Finding**: Between K2 Horizon 0.9B and Llama 3.2 1B, K2 proved to be the better fit for our notification-analysis workload. As a dedicated reasoning model, its reasoning-oriented design and strict instruction following allow it to reliably compile complex natural language rules into structured schemas (86.7%) and decipher subtle human emotions like passive aggressive frustration where Llama 3.2 1B falls short or misclassifies dismissiveness as neutral agreement.
+- **Key Finding**: Between K2 Horizon 0.9B and Llama 3.2 1B, K2 proved to be the better fit for our notification-analysis workload. As a dedicated reasoning model, its reasoning-oriented design and strict instruction following allow it to reliably compile complex natural language rules into structured schemas (86.7%) and decipher subtle human emotions like passive aggressive frustration, whereas Llama 3.2 1B frequently produced malformed schemas or misclassified dismissiveness in our evaluation.
 
 #### Reproducing the 500-Case Benchmark
 
@@ -191,7 +191,7 @@ python benchmarks/run_phase2_benchmark_500.py
 Tested on a physical **8GB RAM Android device** under regular daily use:
 
 - **Test Duration**: 5 Continuous Days with 7 active natural language rules.
-- **Notification Volume**: ~500 notifications/day (~2,500 total processed from WhatsApp, Microsoft Teams, Slack, Instagram, and phone calls).
+- **Notification Volume**: ~500 notifications/day (~2,500 total processed from WhatsApp, Microsoft Teams, Instagram, and phone calls).
 - **Observations**: We observed only 2–3 minor edge cases across approximately 2,500 notifications.
 - **Thermals & Battery**: No measurable additional standby battery drain and no noticeable thermal buildup during our 5-day test.
 - **Latency**: `< 0.2 ms` for deterministic rules; `~150–300 ms` for on-demand deep reasoning.
