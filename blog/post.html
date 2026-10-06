@@ -214,7 +214,7 @@
           <tbody class="divide-y divide-slate-100 text-slate-700 bg-white">
             <tr>
               <td class="py-3.5 px-3 font-mono font-bold text-slate-900 align-top">1</td>
-              <td class="py-3.5 px-4 align-top font-medium text-slate-800">Full precision 0.9B (~2.1 GB), inference on every notification</td>
+              <td class="py-3.5 px-4 align-top font-medium text-slate-800">BF16 0.9B (~2.16 GB), inference on every notification</td>
               <td class="py-3.5 px-4 align-top text-slate-600">Loaded fine into RAM, but heavy continuous CPU compute on each incoming alert caused immediate phone heating and rapid battery drain.</td>
             </tr>
             <tr>
@@ -267,7 +267,7 @@
       </p>
 
       <p>
-        We benchmarked <strong>K2 Horizon 0.9B</strong> against <strong>Llama 3.2 1B</strong> under identical conditions. K2 performed better than Llama on our notification-analysis benchmark:
+        We benchmarked <strong>K2 Horizon 0.9B</strong> against <strong>Llama 3.2 1B</strong> under identical conditions. K2 performed better than Llama 3.2 1B on our notification-analysis benchmark:
       </p>
 
       <!-- Visual Benchmark Comparison Vertical Bar Chart Card -->
@@ -641,7 +641,7 @@ Deploying a language model directly on a mobile device introduces strict thermal
 
 | Attempt | Setup | What happened |
 |---|---|---|
-| **1** | Full precision 0.9B (~2.1 GB), inference on every notification | Loaded fine into RAM, but heavy continuous CPU compute on each alert caused immediate phone heating and battery drain. |
+| **1** | BF16 0.9B (~2.16 GB), inference on every notification | Loaded fine into RAM, but heavy continuous CPU compute on each alert caused immediate phone heating and battery drain. |
 | **2** | RAM residency & lazy loading (permanent vs. idle timeout) | Continuous RAM residency created constant memory pressure, while lazy unloading triggered repeated cold-starts and CPU spikes during notification bursts. |
 
 Running model inference on every incoming notification was fundamentally the wrong design for an always-on background service. That led to rethinking the entire architecture from first principles:
