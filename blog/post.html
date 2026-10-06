@@ -423,7 +423,7 @@
           </div>
         </div>
         <p class="text-xs sm:text-sm text-slate-600 m-0 leading-relaxed">
-          <strong>Case Breakdown:</strong> While both models reliably catch explicit emergency keywords like "Urgent" (right), K2 Horizon 0.9B successfully identifies nuanced conversational cues like passive aggressive frustration (left) to silence unneeded alerts, where other sub-1B models misclassify dismissiveness as neutral agreement.
+          <strong>Case Breakdown:</strong> While both models reliably catch explicit emergency keywords like "Urgent" (right), K2 Horizon 0.9B successfully identifies nuanced conversational cues like passive aggressive frustration (left) to silence unneeded alerts, where Llama 3.2 1B misclassifies dismissiveness as neutral agreement.
         </p>
       </div>
 
@@ -672,7 +672,7 @@ Before daily-driver deployment, we conducted rigorous stress tests across a benc
 |---|---|
 | ![Stress Case 1](/static/images/stress_case_1_passive_aggressive.png) | ![Stress Case 2](/static/images/stress_case_2_urgent_escalation.png) |
 
-**Case Breakdown:** While both models reliably catch explicit emergency keywords like "Urgent" (Case #2), K2 Horizon 0.9B successfully identifies nuanced conversational cues like passive aggressive frustration (Case #1) to silence unneeded alerts, where other sub-1B models misclassify dismissiveness as neutral agreement.
+**Case Breakdown:** While both models reliably catch explicit emergency keywords like "Urgent" (Case #2), K2 Horizon 0.9B successfully identifies nuanced conversational cues like passive aggressive frustration (Case #1) to silence unneeded alerts, where Llama 3.2 1B misclassifies dismissiveness as neutral agreement.
 
 Between K2 Horizon 0.9B and Llama 3.2 1B, K2 proved to be the better fit for our notification-analysis workload. As a dedicated reasoning model, its reasoning-oriented design and strict instruction following allow it to reliably compile complex natural language rules into structured schemas and decipher subtle human emotions where generalist sub-1B models fall short.
 
