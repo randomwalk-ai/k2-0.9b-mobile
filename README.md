@@ -21,50 +21,65 @@ Everything runs **100% locally on-device**: zero cloud API calls, zero telemetry
 ## Architecture & System Design
 
 ```
-                         Incoming Android Notification
+ ┌────────────────────────────────────┐
+ │ 1. Add a Rule                      │
+ │                                    │
+ │  📝 Write rule in plain English   │
+ │              │                     │
+ │              ▼                     │
+ │  🧠 K2 Horizon AI reads it once    │
+ │              │                     │
+ │              ▼                     │
+ │  💾 Saves as Simple / Complex Rule │
+ └──────────────────┬─────────────────┘
+                    │
+                    │ (Uses saved rules)
+                    ▼
+ ┌────────────────────────────────────────────────────────────────────────┐
+ │ ⚙️ AI Rule Engine                                                      │
+ │                                                                        │
+ │                      🔍 Which type of rule matches? ◄── [ 2. Notification ]
+ │                                    │                    [    Arrives      ]
+ │                  ┌─────────────────┴─────────────────┐                 │
+ │                  ▼                                   ▼                 │
+ │  ⚡ Simple Rule (Apps, Names, Keywords) 🧠 Complex Rule (Tone, Emotion)│
+ │  ┌─────────────────────────────────┐   ┌─────────────────────────────┐ │
+ │  │      Fast Classifier (<0.2ms)   │   │       K2 Horizon AI         │ │
+ │  │    • Zero heat                  │   │   • Runs on-demand for      │ │
+ │  │    • Zero battery drain         │   │     deep reasoning          │ │
+ │  └────────────────┬────────────────┘   └──────────────┬──────────────┘ │
+ │                   │                                   │                │
+ │                   └─────────────────┬─────────────────┘                │
+ │                                     │                                  │
+ │                                     ▼                                  │
+ │                            ❗️ Important?                              │
+ └─────────────────────────────────────┬──────────────────────────────────┘
                                        │
-                                       ▼
-                   ┌───────────────────────────────────────┐
-                   │       NotificationProcessor           │
-                   │   (Dynamic Extraction & Parsing)      │
-                   └───────────────────┬───────────────────┘
-                                       │
-                                       ▼
-                   ┌───────────────────────────────────────┐
-                   │    Compiled Rule Execution Engine     │
-                   │           (Room DB Cache)             │
-                   └───────┬───────────────────────┬───────┘
-                           │                       │
-              [Tier 1: AOT_FAST]              [Tier 2: K2_DEEP]
-                           │                       │
-                           ▼                       ▼
-            ┌─────────────────────────────┐ ┌─────────────────────────────┐
-            │   AOT Fast Pattern Engine   │ │     K2 Horizon 0.9B SLM     │
-            │  - Keyword & Contact Match  │ │   (llama.cpp 4-bit Engine)  │
-            │  - App Domain Classification│ │  - Emotion / Tone Analysis  │
-            │  - Exclusion Hierarchy Rules│ │  - Deep Semantic Reasoning │
-            │      Latency: < 0.2ms       │ │      Latency: ~150-300ms    │
-            └──────────────┬──────────────┘ └──────────────┬──────────────┘
-                           │                               │
-                           └───────────────┬───────────────┘
-                                           │
-                                           ▼
-                            Final Routing Decision
-                     (Alert / Priority / Mute / Suppress)
+                    ┌──────────────────┴──────────────────┐
+               [ YES ]                                 [ NO ]
+                    │                                     │
+                    ▼                                     ▼
+ ┌────────────────────────────────────┐ ┌─────────────────────────────────┐
+ │ 3. Result & Action                 │ │ 3. Result & Action              │
+ │                                    │ │                                 │
+ │ 🔊 High-Priority Alert             │ │ 🔕 Silence Quietly              │
+ │    (Sound Chime & Vibrate)         │ │    (Muted)                      │
+ └────────────────────────────────────┘ └─────────────────────────────────┘
 ```
 
-### Dual-Tier Hybrid Execution Pipeline
+### Ahead-of-Time (AOT) Rule Compilation Architecture
 
-Running full SLM inference on every single incoming notification introduces severe mobile battery drain and thermal throttling. To solve this, K2 Horizon uses an **Ahead-of-Time (AOT) Rule Compiler architecture**:
+Running model inference on every incoming notification was fundamentally the wrong design for an always-on mobile service. To eliminate battery drain and device heating, K2 Horizon acts as an **Ahead-of-Time (AOT) Rule Compiler**:
 
-1. **At Rule Creation Time (AOT Compilation)**:
-   - When you enter a natural rule (e.g., *"if any msg from Sarah it is important, if she sends reels it is not important"*), K2 Horizon runs **once**.
-   - It compiles the natural language intent into a structured JSON schema containing target apps, contacts, positive topic anchors, and negative exclusion rules.
-2. **Tier 1: Fast Classifier Runtime Path (`< 0.2 ms`)**:
-   - Incoming notifications are evaluated instantly against cached schemas in native memory.
-   - App filters, contact lookups, and keyword exclusions execute with zero battery drain and zero CPU spikes.
-3. **Tier 2: K2 Horizon Deep AI On-Demand (`~150–300 ms`)**:
-   - If and only if a rule requires subjective emotional evaluation or tone reasoning (e.g., *"Charlie when angry is not important"* or *"Alert if manager sounds furious"*), the notification is routed to K2 Horizon for deep semantic reasoning.
+1. **1. Add a Rule (AOT Compilation)**:
+   - When you write a rule in plain English (e.g., *"if any msg from madhu it is important, if she sends reels it is not important"*), K2 Horizon reads it **once**.
+   - It compiles the natural language intent into a structured JSON schema and saves it as either a **Simple Rule** or a **Complex Rule**.
+2. **2. Notification Arrives (AI Rule Engine)**:
+   - **Simple Rules (Apps, Names, Keywords, Exclusions)**: Evaluated instantly by the **Fast Classifier (`<0.2 ms`)** in native memory with zero heat and zero battery drain.
+   - **Complex Rules (Tone, Emotion, Context)**: If and only if a rule requires sentiment or emotional nuance (e.g., *"Charlie when angry is not important"*), the notification is routed to **K2 Horizon AI** on-demand for deep reasoning.
+3. **3. Result & Action**:
+   - **High-Priority Alert**: Triggers a sound chime and custom vibration even if phone notification volume is muted or set to zero.
+   - **Silence Quietly**: Silences non-priority notifications without interruption.
 
 ---
 
@@ -170,13 +185,10 @@ Tested on a physical **8GB RAM Android device** under regular daily use:
 
 | Rule Intent | Engine | Natural Language Example |
 | :--- | :--- | :--- |
-| **`APP_FILTER`** | `AOT_FAST` (`<0.2ms`) | *"Any message from Teams or Slack is important"* |
-| **`TOPIC_FILTER`** | `AOT_FAST` (`<0.2ms`) | *"Alert any message about OTP, server outage, or delivery"* |
-| **`SIMPLE_CONTACT`** | `AOT_FAST` (`<0.2ms`) | *"If Alice calls or messages me it is important"* |
-| **`SIMPLE_BLOCK`** | `AOT_FAST` (`<0.2ms`) | *"Mute all promotional offers from Swiggy"* |
-| **`CONDITIONAL_CONTACT`** | `AOT_FAST` (`<0.2ms`) | *"Alice is important, but if she sends reels or memes mute it"* |
-| **`CONDITIONAL_EMOTION`** | `K2_DEEP` (`On-Demand`) | *"Charlie when angry is not important"*, *"Alert if boss sounds furious"* |
-| **`MULTI_CONDITION`** | Hybrid | *"Arjun related to job is important, otherwise ignore"* |
+| **`Fast Contact`** | Fast Classifier (`<0.2ms`) | *"if pranav calls me it is important"* |
+| **`AOT Topic Filter`** | Fast Classifier (`<0.2ms`) | *"anyone msges about playing cricket it is important"* |
+| **`AOT Conditional`** | Fast Classifier (`<0.2ms`) | *"if any msg from madhu it is important, if she sends reels it is not important"* |
+| **`Deep AI Emotion`** | K2 Horizon AI (`On-Demand`) | *"Charlie when angry is not important"*, *"Alert if boss sounds furious"* |
 
 ---
 
@@ -186,12 +198,12 @@ Tested on a physical **8GB RAM Android device** under regular daily use:
 k2-0.9b-mobile/
 ├── README.md
 ├── LICENSE
-├── deploy_post/                       # Web blog static deployment bundle
+├── blog/                              # Web blog static deployment bundle
 │   ├── index.html                     # Case study article & interactive post
-│   ├── vercel.json                    # Deployment routing config
+│   ├── post.html                      # Standalone article post
 │   └── static/images/                 # System architecture and benchmark visual assets
 │
-├── benchmarks/                        # Python evaluation datasets and benchmarks
+├── benchmarks/                        # 500-sample benchmark evaluation suite
 │   ├── run_phase2_benchmark_500.py    # 500-sample stress benchmark runner
 │   ├── benchmark_engine.py            # Automated benchmark evaluation harness
 │   ├── test_cases_500.json            # 500-sample stress benchmark dataset
@@ -203,7 +215,7 @@ k2-0.9b-mobile/
     │   │   ├── K2InferenceManager.kt  # On-device llama.cpp loader & lifecycle
     │   │   ├── K2PromptBuilder.kt     # System prompts & few-shot compiler prompts
     │   │   ├── K2ResponseParser.kt    # Structured JSON response parser
-    │   │   └── RuleCompiler.kt        # Edge AI rule compilation engine
+    │   │   └── RuleClassifier.kt      # Edge AI rule classification schemas
     │   ├── notification/
     │   │   ├── NotificationListener.kt  # Android NotificationListenerService
     │   │   └── NotificationProcessor.kt # Hybrid dual-tier routing processor
