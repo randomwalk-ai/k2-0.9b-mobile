@@ -263,7 +263,7 @@
       <h2>3. Stress Testing &amp; Benchmarks: K2 Horizon 0.9B vs. Llama 3.2 1B</h2>
 
       <p>
-        Before deploying to daily-driver testing, we conducted rigorous stress tests across a benchmark dataset of <strong>500 diverse test cases</strong>. The test suite covered complex user emotional tones (sarcasm, passive aggressive frustration, anger), urgent emergency escalation, conditional exclusions, and app-specific rules. The reported accuracy reflects end-to-end performance of our notification-analysis pipeline on this workload, including rule compilation, deterministic matching, and semantic escalation where applicable.
+        Before deploying to daily-driver testing, we conducted rigorous stress tests across a benchmark dataset of <strong>500 diverse test cases</strong>. The test suite covered complex user emotional tones (sarcasm, passive aggressive frustration, anger), urgent emergency escalation, conditional exclusions, and app-specific rules. The reported accuracy reflects end-to-end performance of our notification-analysis pipeline using each model’s compiled rules, deterministic matching, and semantic escalation where applicable.
       </p>
 
       <p>
@@ -658,7 +658,7 @@ Instead of treating K2 Horizon as a runtime filter that evaluates every message,
 
 ## 3. Stress Testing & Benchmarks: K2 Horizon 0.9B vs. Llama 3.2 1B
 
-Before daily-driver deployment, we conducted rigorous stress tests across a benchmark dataset of **500 diverse test cases** covering emotions (sarcasm, passive aggressive frustration, anger), urgent escalation, conditional exclusions, and app rules. The reported accuracy reflects end-to-end performance of our notification-analysis pipeline on this workload, including rule compilation, deterministic matching, and semantic escalation where applicable.
+Before daily-driver deployment, we conducted rigorous stress tests across a benchmark dataset of **500 diverse test cases** covering emotions (sarcasm, passive aggressive frustration, anger), urgent escalation, conditional exclusions, and app rules. The reported accuracy reflects end-to-end performance of our notification-analysis pipeline using each model’s compiled rules, deterministic matching, and semantic escalation where applicable.
 
 ### Key Benchmark Metrics (500 Test Cases):
 - **Overall Triage Accuracy:** K2 Horizon 0.9B scored **65.8% (329/500)** vs. Llama 3.2 1B at **41.0% (205/500)** (+24.8% Higher Overall Accuracy).
