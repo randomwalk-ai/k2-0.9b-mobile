@@ -247,7 +247,7 @@ The system was evaluated as a primary daily driver on a physical 8GB RAM Android
 
 ## Documentation & References
 
-- **[Engineering Blog Post](https://k2-blog-randomwalk.vercel.app/)**: Comprehensive engineering case study detailing thermal optimization, memory management, and benchmark breakdowns.
+- **[Engineering Blog Post](https://randomwalk.ai/blog/k2-horizon-09b-model-beats-llama-32-1b-by-25-heres-how-we-did-it)**: Comprehensive engineering case study detailing thermal optimization, memory management, and benchmark breakdowns.
 - **[IFM/K2-Horizon-0.9B on Hugging Face](https://huggingface.co/IFM/K2-Horizon-0.9B)**: Official base model repository and model cards.
 - **[IFM/K2-Horizon-0.9B-GGUF on Hugging Face](https://huggingface.co/IFM/K2-Horizon-0.9B-GGUF)**: Official pre-quantized GGUF model weights for mobile execution.
 - **[Embedded llama.cpp Runtime](llama.cpp/)**: Embedded K2-compatible llama.cpp engine incorporating dedicated IFM K2 Horizon architecture support (`LLM_ARCH_K2_HORIZON`) and custom tokenization patterns. (Upstream reference: [llama.cpp](https://github.com/ggerganov/llama.cpp)).
