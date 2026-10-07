@@ -27,7 +27,7 @@ K2 Horizon acts primarily as an **Ahead-of-Time Rule Compiler**. When a user add
 ## Key Features
 
 - **Natural-Language Rule Authoring**: Define complex notification priority policies in everyday English without writing regex or complex logical scripts.
-- **Ahead-of-Time (AOT) Rule Compilation**: K2 Horizon parses rule intent once at creation time, compiling it into structured JSON matching schemas.
+- **Ahead-of-Time (AOT) Rule Compilation**: K2 Horizon parses rule intent once when rules are created or edited, compiling it into structured JSON matching schemas.
 - **Deterministic Fast-Path Execution**: Evaluates app filters, contact names, keywords, and exclusion criteria in `<0.2 ms` with zero GPU/NPU overhead.
 - **Selective On-Demand Semantic Reasoning**: Invokes K2 Horizon only when emotional tone, sarcasm, or contextual intent requires deep reasoning.
 - **High-Priority Media Alerting**: Bypasses system notification mute settings using custom audio/vibration channels for urgent alerts.
@@ -55,15 +55,15 @@ flowchart TD
     FastDecision --> Action{"Priority Decision"}
     SemanticDecision --> Action
     Action -->|"Important"| Alert["High-Priority Alert (Chime & Vibrate)"]
-    Action -->|"Not Important"| Mute["Silence Notification"]
+    Action -->|"Not Important"| Mute["Suppress App Alert"]
 ```
 
 ### Execution Flow:
 
-1. **Rule Creation Time (AOT Compilation)**: K2 Horizon evaluates the rule prompt once and extracts target app identifiers, sender contacts, required keywords, exclusion terms, and semantic flags into a structured JSON schema.
+1. **Rule Configuration (AOT Compilation)**: When rules are created or edited, K2 Horizon evaluates the rule prompt once and extracts target app identifiers, sender contacts, required keywords, exclusion terms, and semantic flags into a structured JSON schema.
 2. **Runtime Fast Path (<0.2 ms)**: Once rules are compiled, simple notifications are handled by the deterministic fast path without repeatedly invoking the model. The on-device classifier evaluates sender strings, app package names, and keywords against compiled schemas in native memory in `<0.2 ms`.
 3. **On-Demand Semantic Escalation**: If a notification satisfies base contact criteria for a rule marked with semantic reasoning, the notification text is escalated to K2 Horizon for contextual analysis.
-4. **Alert Dispatch**: Notifications resolved as important trigger immediate audio chimes and haptics; non-matching or excluded notifications are silenced quietly.
+4. **Alert Dispatch**: Notifications resolved as important trigger immediate audio chimes and haptics; non-matching or excluded notifications have their alert suppressed quietly without modifying or dismissing the third-party notification from the system shade.
 
 > [!NOTE]
 > **Configuration-Time Compute vs. Steady-State Matching:**<br>
@@ -80,12 +80,12 @@ This repository maintains a clear distinction between the **mobile deployment ru
 | **Model** | [IFM/K2-Horizon-0.9B](https://huggingface.co/IFM/K2-Horizon-0.9B) | [IFM/K2-Horizon-0.9B](https://huggingface.co/IFM/K2-Horizon-0.9B) |
 | **Format** | 4-bit Quantized GGUF (`Q4_K_M`) | Full Precision FP32 PyTorch / Transformers |
 | **Artifact** | [`k2-horizon-0.9b-q4_k_m.gguf`](https://huggingface.co/IFM/K2-Horizon-0.9B-GGUF) (~635 MiB / ~666 MB) | Base PyTorch weights |
-| **Runtime Engine** | Embedded [llama.cpp](https://github.com/ggerganov/llama.cpp) C++ mobile engine | Python 3.10+ / PyTorch CPU |
+| **Runtime Engine** | Embedded K2-compatible [llama.cpp](https://github.com/ggerganov/llama.cpp) C++ mobile engine | Python 3.10+ / PyTorch CPU |
 | **Execution Target** | Mobile ARM64 CPU | Desktop / Server CPU |
 
 > [!TIP]
 > **Why 4-Bit Quantization (`Q4_K_M`) for Real-World Mobile Deployment?**<br>
-> For everyday mobile deployment on Android, the 4-bit quantized version of K2 Horizon (Q4_K_M, ~635 MiB / ~666 MB) is more than enough to handle all real-world rules and workloads. It reduces memory usage by 70%, lowers inference latency, and eliminates device heating—providing the optimal balance of deep reasoning intelligence, instantaneous AOT rule compilation, and all-day battery efficiency.
+> For everyday mobile deployment on Android, the 4-bit quantized version of K2 Horizon (Q4_K_M, ~635 MiB / ~666 MB) is more than enough to handle all real-world rules and workloads. It reduces memory usage by 70%, lowers inference latency, and showed no noticeable thermal buildup during our 5-day daily-driver testing—providing the optimal balance of deep reasoning intelligence, AOT rule compilation, and all-day battery efficiency.
 
 ---
 
@@ -118,8 +118,8 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 Download the pre-quantized GGUF model artifact:
 
 ```bash
-# Download using Hugging Face Hub CLI
-huggingface-cli download IFM/K2-Horizon-0.9B-GGUF k2-horizon-0.9b-q4_k_m.gguf --local-dir ./
+# Download using Hugging Face CLI
+hf download IFM/K2-Horizon-0.9B-GGUF k2-horizon-0.9b-q4_k_m.gguf --local-dir ./
 ```
 
 Deploy the `.gguf` file to your Android device:
@@ -150,14 +150,14 @@ We benchmarked K2 Horizon 0.9B against Llama 3.2 1B using the same 500-case data
 | Evaluation Metric | K2 Horizon 0.9B | Llama 3.2 1B | Absolute Margin |
 | :--- | :---: | :---: | :---: |
 | **Overall Notification Triage** | **66.2%** (331/500) | 41.0% (205/500) | **+25.2%** |
-| **AOT Rule Compilation (15 Rules)** | **86.7%** (13/15) | 26.7% (4/15) | **+60.0%** |
+| **AOT Rule Compilation (15 Complex Rules)** | **86.7%** (13/15) | 26.7% (4/15) | **+60.0%** |
 | **Deep AI Emotional Nuance (250 Tone Cases)** | **58.4%** (146/250) | 48.4% (121/250) | **+10.0%** |
 
 > [!NOTE]
 > **Methodology & Normalization Notes:**<br>
 > - These results come from our internal notification-analysis benchmark and should not be interpreted as a general ranking of K2 Horizon 0.9B versus Llama 3.2 1B across language-model tasks.
 > - In accordance with system semantics, suppression actions (`IGNORE` ≡ `MUTE`) are normalized during evaluation because both produce the same non-alerting runtime behavior.
-> - The 15 natural-language rules evaluate compilation across contact lookups, app filters, multi-condition exclusions, and tone-detection criteria.
+> - The 15 complex rules evaluate compilation across contact lookups, app filters, multi-condition exclusions, and tone-detection criteria.
 
 ### Reproducing the Benchmark
 
@@ -168,7 +168,7 @@ To run the full 500-sample Phase 2 benchmark evaluation harness from the reposit
 pip install torch transformers llama-cpp-python
 
 # 2. Download Llama 3.2 1B Instruct baseline GGUF (K2 weights download automatically via Hugging Face)
-huggingface-cli download lmstudio-community/Llama-3.2-1B-Instruct-GGUF Llama-3.2-1B-Instruct-bf16.gguf --local-dir ./
+hf download lmstudio-community/Llama-3.2-1B-Instruct-GGUF Llama-3.2-1B-Instruct-bf16.gguf --local-dir ./
 
 # 3. Execute the benchmark runner
 python benchmarks/run_phase2_benchmark_500.py
@@ -243,10 +243,10 @@ The system was evaluated as a primary daily driver on a physical 8GB RAM Android
 │
 ├── blog/                              # Web blog static deployment bundle
 │   ├── index.html                     # Case study article & interactive post
-│   ├── post.html                      # Standalone article post
+│   ├── vercel.json                    # Vercel static routing configuration
 │   └── static/images/                 # System architecture and benchmark visual assets
 │
-├── llama.cpp/                         # Embedded llama.cpp runtime & Android app
+├── llama.cpp/                         # Embedded K2-compatible llama.cpp runtime & Android app
 │   └── examples/llama.android/
 │       ├── app/                       # Android application (Kotlin & Jetpack Compose)
 │       │   └── src/main/java/com/example/llama/aichat/
@@ -267,7 +267,7 @@ The system was evaluated as a primary daily driver on a physical 8GB RAM Android
 - **[Engineering Blog Post](https://k2-blog-randomwalk.vercel.app/)**: Comprehensive engineering case study detailing thermal optimization, memory management, and benchmark breakdowns.
 - **[IFM/K2-Horizon-0.9B on Hugging Face](https://huggingface.co/IFM/K2-Horizon-0.9B)**: Official base model repository and model cards.
 - **[IFM/K2-Horizon-0.9B-GGUF on Hugging Face](https://huggingface.co/IFM/K2-Horizon-0.9B-GGUF)**: Official pre-quantized GGUF model weights for mobile execution.
-- **[llama.cpp Repository](https://github.com/ggerganov/llama.cpp)**: Open-source C++ inference engine for LLMs.
+- **[Embedded llama.cpp Runtime](llama.cpp/)**: Embedded K2-compatible llama.cpp engine incorporating dedicated IFM K2 Horizon architecture support (`LLM_ARCH_K2_HORIZON`) and custom tokenization patterns. (Upstream reference: [llama.cpp](https://github.com/ggerganov/llama.cpp)).
 
 ---
 
