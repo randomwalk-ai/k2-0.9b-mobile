@@ -52,6 +52,7 @@ except Exception:
     HAS_LLAMA_CPP = False
 
 K2_MODEL_ID = "IFM/K2-Horizon-0.9B"
+K2_REVISION = "fa7f5ded0883803c8d8f2bdbfddcdba2e462e698"
 LLAMA_GGUF_PATH = "Llama-3.2-1B-Instruct-bf16.gguf"
 if not os.path.exists(LLAMA_GGUF_PATH):
     candidate_root = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "Llama-3.2-1B-Instruct-bf16.gguf")
@@ -166,10 +167,11 @@ class ModelEngine:
     def load_k2(self):
         if self.k2_loaded and self.k2_model is not None:
             return
-        print(f"[ModelEngine] Loading K2 Horizon 0.9B into RAM...")
-        self.k2_tokenizer = AutoTokenizer.from_pretrained(K2_MODEL_ID, trust_remote_code=True)
+        print(f"[ModelEngine] Loading K2 Horizon 0.9B into RAM (revision: {K2_REVISION})...")
+        self.k2_tokenizer = AutoTokenizer.from_pretrained(K2_MODEL_ID, revision=K2_REVISION, trust_remote_code=True)
         self.k2_model = AutoModelForCausalLM.from_pretrained(
             K2_MODEL_ID,
+            revision=K2_REVISION,
             dtype=torch.float32,
             low_cpu_mem_usage=True,
             trust_remote_code=True

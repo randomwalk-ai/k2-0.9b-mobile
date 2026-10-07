@@ -83,7 +83,7 @@ This repository maintains a clear distinction between the **mobile deployment ru
 
 > [!TIP]
 > **Why 4-Bit Quantization (`Q4_K_M`) for Real-World Mobile Deployment?**<br>
-> For everyday mobile deployment on Android, the 4-bit quantized version of K2 Horizon (Q4_K_M, ~635 MiB / ~666 MB) is more than enough to handle all real-world rules and workloads. It reduces memory usage by 70%, lowers inference latency, and showed no noticeable thermal buildup during our 5-day daily-driver testing—providing the optimal balance of deep reasoning intelligence, AOT rule compilation, and all-day battery efficiency.
+> For everyday mobile deployment on Android, the 4-bit quantized version of K2 Horizon (Q4_K_M, ~635 MiB / ~666 MB) is more than enough to handle all real-world rules and workloads. It reduces model artifact size by ~69% (from ~2.16 GB to ~666 MB), lowers inference latency, and showed no noticeable thermal buildup during our 5-day daily-driver testing—providing the optimal balance of deep reasoning intelligence, AOT rule compilation, and all-day battery efficiency.
 
 ---
 
@@ -93,7 +93,7 @@ This repository maintains a clear distinction between the **mobile deployment ru
 - **Development Environment**: Android Studio (Ladybug / Meerkat or later) with Java 17.
 - **Target Device**: Physical Android device running Android 13+ (API Level 33+, targetSdk 36).
 - **Model File**: [`K2-Horizon-1B-Q4_K_M.gguf`](https://huggingface.co/IFM/K2-Horizon-0.9B-GGUF) (~635 MiB / ~666 MB).
-- **Permissions**: Android `BIND_NOTIFICATION_LISTENER_SERVICE` access.
+- **Permissions**: Notification Listener Access (granted via `Settings > Apps > Special App Access > Notification Access`).
 
 ### 1. Build & Install Android App
 
@@ -171,11 +171,11 @@ hf download unsloth/Llama-3.2-1B-Instruct-GGUF Llama-3.2-1B-Instruct-BF16.gguf -
 # 3. Rename the downloaded file to match the exact local filename expected by the benchmark runner
 mv Llama-3.2-1B-Instruct-BF16.gguf Llama-3.2-1B-Instruct-bf16.gguf
 
-# 4. Execute the benchmark runner (K2 weights download automatically via Hugging Face)
+# 4. Execute the benchmark runner (K2 weights download automatically via Hugging Face pinned to revision `fa7f5ded0883803c8d8f2bdbfddcdba2e462e698`)
 python benchmarks/run_phase2_benchmark_500.py
 ```
 
-The benchmark reads the frozen Phase 1 compiled schema artifact ([`benchmarks/compiled_rules_phase1.json`](benchmarks/compiled_rules_phase1.json)) and evaluates against [`benchmarks/test_cases_500.json`](benchmarks/test_cases_500.json). Both benchmark model artifacts are referenced by immutable Hugging Face revisions to preserve the intended evaluation inputs.
+The benchmark reads the frozen Phase 1 compiled schema artifact ([`benchmarks/compiled_rules_phase1.json`](benchmarks/compiled_rules_phase1.json)) and evaluates against [`benchmarks/test_cases_500.json`](benchmarks/test_cases_500.json). Both benchmark model artifacts are referenced by immutable Hugging Face revisions (`fa7f5ded0883803c8d8f2bdbfddcdba2e462e698` for K2 Horizon 0.9B, and `968ce64e8967a9ca4b1ddc35e81eb85e447ffe49` for Llama 3.2 1B) to guarantee exact evaluation inputs.
 
 ---
 
