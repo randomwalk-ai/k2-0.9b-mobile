@@ -79,7 +79,7 @@ This repository maintains a clear distinction between the **mobile deployment ru
 | :--- | :--- | :--- |
 | **Model** | [IFM/K2-Horizon-0.9B](https://huggingface.co/IFM/K2-Horizon-0.9B) | [IFM/K2-Horizon-0.9B](https://huggingface.co/IFM/K2-Horizon-0.9B) |
 | **Format** | 4-bit Quantized GGUF (`Q4_K_M`) | Full Precision FP32 PyTorch / Transformers |
-| **Artifact** | [`k2-horizon-0.9b-q4_k_m.gguf`](https://huggingface.co/IFM/K2-Horizon-0.9B-GGUF) (~635 MiB / ~666 MB) | Base PyTorch weights |
+| **Artifact** | [`K2-Horizon-1B-Q4_K_M.gguf`](https://huggingface.co/IFM/K2-Horizon-0.9B-GGUF) (~635 MiB / ~666 MB) | Base PyTorch weights |
 | **Runtime Engine** | Embedded K2-compatible [llama.cpp](https://github.com/ggerganov/llama.cpp) C++ mobile engine | Python 3.10+ / PyTorch CPU |
 | **Execution Target** | Mobile ARM64 CPU | Desktop / Server CPU |
 
@@ -94,7 +94,7 @@ This repository maintains a clear distinction between the **mobile deployment ru
 ### Prerequisites
 - **Development Environment**: Android Studio (Ladybug / Meerkat or later) with Java 17.
 - **Target Device**: Physical Android device running Android 13+ (API Level 33+, targetSdk 36).
-- **Model File**: [`k2-horizon-0.9b-q4_k_m.gguf`](https://huggingface.co/IFM/K2-Horizon-0.9B-GGUF) (~635 MiB / ~666 MB).
+- **Model File**: [`K2-Horizon-1B-Q4_K_M.gguf`](https://huggingface.co/IFM/K2-Horizon-0.9B-GGUF) (~635 MiB / ~666 MB).
 - **Permissions**: Android `BIND_NOTIFICATION_LISTENER_SERVICE` access.
 
 ### 1. Build & Install Android App
@@ -115,22 +115,22 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 
 ### 2. Download and Transfer Model File
 
-Download the pre-quantized GGUF model artifact:
+Download the official pre-quantized Q4_K_M GGUF model artifact from Hugging Face:
 
 ```bash
-# Download using Hugging Face CLI
-hf download IFM/K2-Horizon-0.9B-GGUF k2-horizon-0.9b-q4_k_m.gguf --local-dir ./
+# Download using Hugging Face CLI (pinned to immutable revision)
+hf download IFM/K2-Horizon-0.9B-GGUF K2-Horizon-1B-Q4_K_M.gguf --revision 02c004d3dfc0666ec261a3b0a64d849ff2100dae --local-dir ./
 ```
 
 Deploy the `.gguf` file to your Android device:
 
 - **Option A: Direct ADB Push (Recommended)**
   ```bash
-  adb push k2-horizon-0.9b-q4_k_m.gguf /sdcard/Download/
+  adb push K2-Horizon-1B-Q4_K_M.gguf /sdcard/Download/
   ```
-  *(The application automatically scans the device's `Download/` directory on startup).*
+  *(The Android application scans `/sdcard/Download/` on launch, automatically discovers the `.gguf` file, and imports it into internal app storage as `k2-horizon-0.9b-q4_k_m.gguf`).*
 - **Option B: In-App Model Importer**
-  Transfer `k2-horizon-0.9b-q4_k_m.gguf` to any device folder, launch the app, tap **"Import GGUF Model"**, and select the file.
+  Transfer `K2-Horizon-1B-Q4_K_M.gguf` to any folder on your device, launch the app, tap **"Import GGUF Model"**, and select the file.
 
 ### 3. Grant Permissions & Create Rules
 
@@ -167,14 +167,17 @@ To run the full 500-sample Phase 2 benchmark evaluation harness from the reposit
 # 1. Install benchmark dependencies
 pip install torch transformers llama-cpp-python
 
-# 2. Download Llama 3.2 1B Instruct baseline GGUF (K2 weights download automatically via Hugging Face)
-hf download lmstudio-community/Llama-3.2-1B-Instruct-GGUF Llama-3.2-1B-Instruct-bf16.gguf --local-dir ./
+# 2. Download Llama 3.2 1B Instruct baseline GGUF (pinned to immutable revision)
+hf download unsloth/Llama-3.2-1B-Instruct-GGUF Llama-3.2-1B-Instruct-BF16.gguf --revision 968ce64e8967a9ca4b1ddc35e81eb85e447ffe49 --local-dir ./
 
-# 3. Execute the benchmark runner
+# 3. Rename the downloaded file to match the exact local filename expected by the benchmark runner
+mv Llama-3.2-1B-Instruct-BF16.gguf Llama-3.2-1B-Instruct-bf16.gguf
+
+# 4. Execute the benchmark runner (K2 weights download automatically via Hugging Face)
 python benchmarks/run_phase2_benchmark_500.py
 ```
 
-The benchmark reads the frozen Phase 1 compiled schema artifact ([`benchmarks/compiled_rules_phase1.json`](benchmarks/compiled_rules_phase1.json)) and evaluates against [`benchmarks/test_cases_500.json`](benchmarks/test_cases_500.json).
+The benchmark reads the frozen Phase 1 compiled schema artifact ([`benchmarks/compiled_rules_phase1.json`](benchmarks/compiled_rules_phase1.json)) and evaluates against [`benchmarks/test_cases_500.json`](benchmarks/test_cases_500.json). Both benchmark model artifacts are referenced by immutable Hugging Face revisions to preserve the intended evaluation inputs.
 
 ---
 
