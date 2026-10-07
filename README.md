@@ -61,9 +61,13 @@ flowchart TD
 ### Execution Flow:
 
 1. **Rule Creation Time (AOT Compilation)**: K2 Horizon evaluates the rule prompt once and extracts target app identifiers, sender contacts, required keywords, exclusion terms, and semantic flags into a structured JSON schema.
-2. **Runtime Fast Path (<0.2 ms)**: When an Android notification arrives, the fast classifier evaluates sender strings, app package names, and keywords against compiled schemas in native memory.
+2. **Runtime Fast Path (<0.2 ms)**: Once rules are compiled, simple notifications are handled by the deterministic fast path without repeatedly invoking the model. The on-device classifier evaluates sender strings, app package names, and keywords against compiled schemas in native memory in `<0.2 ms`.
 3. **On-Demand Semantic Escalation**: If a notification satisfies base contact criteria for a rule marked with semantic reasoning, the notification text is escalated to K2 Horizon for contextual analysis.
 4. **Alert Dispatch**: Notifications resolved as important trigger immediate audio chimes and haptics; non-matching or excluded notifications are silenced quietly.
+
+> [!NOTE]
+> **Configuration-Time Compute vs. Steady-State Matching:**<br>
+> AOT compilation is not compute-free: K2 inference runs when rules are created or edited, and creating multiple rules consecutively can produce temporary CPU activity and slight device heating. After compilation, simple notification handling uses deterministic matching without invoking the model on every incoming notification, keeping steady-state processing lightweight.
 
 ---
 

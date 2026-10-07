@@ -247,12 +247,15 @@
         Here is how the dual-engine pipeline operates in practice:
       </p>
 
-      <ul class="space-y-3.5 my-6 list-disc list-inside text-slate-700 text-base">
+      <ul class="space-y-4 my-6 list-disc list-inside text-slate-700 text-base">
         <li>
           <strong>1. At Rule Creation Time (AOT Compilation):</strong> When you type a rule like <em>"if any msg from madhu it is important, if she sends reels it is not important"</em>, K2 processes it once. It extracts the contact name, required topic triggers, and excluded keywords into a structured JSON schema.
+          <p class="mt-2 text-sm text-slate-600 pl-4 border-l-2 border-slate-200">
+            <strong>AOT compilation still has a compute cost.</strong> Because K2 performs inference during rule creation or editing, creating or editing multiple rules consecutively can produce temporary CPU activity and slight device heating. This cost is paid during configuration rather than continuously on every incoming notification.
+          </p>
         </li>
         <li>
-          <strong>2. Fast Classifier Runtime Path (&lt;0.2 ms):</strong> When a notification arrives, the on-device classifier evaluates it against the compiled schema. App filters, contact lookups, and keyword exclusions are processed in less than 0.2 milliseconds with zero CPU spikes and zero thermal buildup.
+          <strong>2. Fast Classifier Runtime Path (&lt;0.2 ms):</strong> Once rules are compiled, simple notifications are handled by the deterministic fast path without repeatedly invoking the model. When a notification arrives, the on-device classifier evaluates it against the compiled schema. App filters, contact lookups, and keyword exclusions are processed in less than 0.2 milliseconds with zero CPU spikes and zero thermal buildup.
         </li>
         <li>
           <strong>3. Complex Semantic Rules (K2 On-Demand):</strong> If a rule explicitly requires sentiment analysis or emotional tone (e.g. <em>"any message from Pranav when he is angry it is not important"</em>), the fast classifier routes only those specific matching messages to K2 Horizon for deep semantic reasoning.
@@ -656,7 +659,10 @@ Running model inference on every incoming notification was fundamentally the wro
 Instead of treating K2 Horizon as a runtime filter that evaluates every message, we convert it into an **Ahead-of-Time (AOT) Rule Compiler**. The language model primarily runs when you create or edit a rule, translating plain-English intent into deterministic matching logic, with on-demand inference for rules that require semantic reasoning.
 
 1. **At Rule Creation Time (AOT Compilation):** When you type a rule like *"if any msg from madhu it is important, if she sends reels it is not important"*, K2 processes it once. It extracts the contact name, required topic triggers, and excluded keywords into a structured JSON schema.
-2. **Fast Classifier Runtime Path (<0.2 ms):** When a notification arrives, the on-device classifier evaluates it against the compiled schema. App filters, contact lookups, and keyword exclusions are processed in less than 0.2 milliseconds with zero CPU spikes and zero thermal buildup.
+
+   **AOT compilation still has a compute cost.** Because K2 performs inference during rule creation or editing, creating or editing multiple rules consecutively can produce temporary CPU activity and slight device heating. This cost is paid during configuration rather than continuously on every incoming notification.
+
+2. **Fast Classifier Runtime Path (<0.2 ms):** Once rules are compiled, simple notifications are handled by the deterministic fast path without repeatedly invoking the model. When a notification arrives, the on-device classifier evaluates it against the compiled schema. App filters, contact lookups, and keyword exclusions are processed in less than 0.2 milliseconds with zero CPU spikes and zero thermal buildup.
 3. **Complex Semantic Rules (K2 On-Demand):** If a rule explicitly requires sentiment analysis or emotional tone (e.g. *"any message from Pranav when he is angry it is not important"*), the fast classifier routes only those specific matching messages to K2 Horizon for deep semantic reasoning.
 
 ---
