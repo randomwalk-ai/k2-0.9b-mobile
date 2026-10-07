@@ -76,7 +76,7 @@ Running model inference on every incoming notification was fundamentally the wro
    - It compiles the natural language intent into a structured JSON schema and saves it as either a **Simple Rule** or a **Complex Rule**.
 2. **2. Notification Arrives (AI Rule Engine)**:
    - **Simple Rules (Apps, Names, Keywords, Exclusions)**: Evaluated instantly by the **Fast Classifier (`<0.2 ms`)** in native memory with zero heat and zero battery drain.
-   - **Complex Rules (Tone, Emotion, Context)**: If and only if a rule requires sentiment or emotional nuance (e.g., *"any message from pranav when he his angry it is not important"*), the notification is routed to **K2 Horizon AI** on-demand for deep reasoning.
+   - **Complex Rules (Tone, Emotion, Context)**: If and only if a rule requires sentiment or emotional nuance (e.g., *"any message from pranav when he is angry it is not important"*), the notification is routed to **K2 Horizon AI** on-demand for deep reasoning.
 3. **3. Result & Action**:
    - **High-Priority Alert**: Triggers a sound chime and custom vibration even if phone notification volume is muted or set to zero.
    - **Silence Quietly**: Silences non-priority notifications without interruption.
@@ -205,7 +205,7 @@ Tested on a physical **8GB RAM Android device** under regular daily use:
 | **`Fast Contact`** | Fast Classifier (`<0.2ms`) | *"if pranav calls me it is important"* |
 | **`AOT Topic Filter`** | Fast Classifier (`<0.2ms`) | *"anyone msges about playing cricket it is important"* |
 | **`AOT Conditional`** | Fast Classifier (`<0.2ms`) | *"if any msg from madhu it is important, if she sends reels it is not important"* |
-| **`Deep AI Emotion`** | K2 Horizon AI (`On-Demand`) | *"any message from pranav when he his angry it is not important"*, *"Alert if boss sounds furious"* |
+| **`Deep AI Emotion`** | K2 Horizon AI (`On-Demand`) | *"any message from pranav when he is angry it is not important"*, *"Alert if boss sounds furious"* |
 
 ---
 
