@@ -18,8 +18,6 @@ Modern mobile users face continuous notification fatigue. Standard device muting
 
 Running raw neural network inference over every incoming notification is impractical for battery-powered mobile devices. This project implements a **Hybrid Ahead-of-Time (AOT) Rule Compilation Architecture**:
 
-$$\text{Natural Language Intent} \longrightarrow \text{AOT Compilation} \longrightarrow \text{Deterministic Runtime Matcher} \longrightarrow \text{Selective Semantic Inference}$$
-
 K2 Horizon acts primarily as an **Ahead-of-Time Rule Compiler**. When a user adds or edits a rule, K2 Horizon parses the natural-language intent once, compiling it into a structured JSON rule schema. Incoming notifications are then evaluated against this schema in memory by a deterministic fast classifier in `<0.2 ms`. If and only if a rule explicitly demands tone, sentiment, or emotional nuance (e.g., *"any message from pranav when he is angry it is not important"*), the fast classifier routes the message to K2 Horizon on demand for deep semantic reasoning.
 
 ---
@@ -235,32 +233,14 @@ The system was evaluated as a primary daily driver on a physical 8GB RAM Android
 
 ```
 .
-├── benchmarks/                        # 500-sample benchmark evaluation suite
-│   ├── benchmark_engine.py            # Automated benchmark evaluation harness
-│   ├── compiled_rules_phase1.json     # Phase 1 compiled rule schemas for K2 & Llama
-│   ├── model_engine.py                # CPU PyTorch/Transformers & GGUF model runner
-│   ├── model_manager.py               # Model weight loader and cache manager
-│   ├── phase2_benchmark_500_results.json # Full evaluation results dataset
-│   ├── run_phase2_benchmark_500.py    # 500-sample triage benchmark runner
-│   └── test_cases_500.json            # Curated 500-sample stress benchmark dataset
-│
-├── blog/                              # Web blog static deployment bundle
-│   ├── index.html                     # Case study article & interactive post
-│   ├── vercel.json                    # Vercel static routing configuration
-│   └── static/images/                 # System architecture and benchmark visual assets
-│
-├── llama.cpp/                         # Embedded K2-compatible llama.cpp runtime & Android app
+├── benchmarks/        # Benchmark suite and evaluation harness
+├── blog/              # Engineering blog
+├── llama.cpp/         # Embedded K2-compatible llama.cpp runtime & Android app
 │   └── examples/llama.android/
-│       ├── app/                       # Android application (Kotlin & Jetpack Compose)
-│       │   └── src/main/java/com/example/llama/aichat/
-│       │       ├── ai/                # AOT compiler, parser, prompt builder & inference manager
-│       │       ├── data/              # Room SQLite database (rules & notifications)
-│       │       ├── notification/      # NotificationListenerService & hybrid processor
-│       │       └── ui/                # UI screens and view models
-│       └── lib/                       # JNI C++ bindings & CMake build configuration
-│
-├── README.md                          # Repository documentation
-└── LICENSE                            # Apache 2.0 license
+│       ├── app/       # Android application
+│       └── lib/       # JNI C++ bindings & CMake configuration
+├── README.md
+└── LICENSE
 ```
 
 ---
@@ -283,8 +263,6 @@ The system was evaluated as a primary daily driver on a physical 8GB RAM Android
 
 ---
 
-## License & Contribution Policy
-
-This repository is maintained as an open-source engineering reference showcasing on-device AI system architecture. External pull requests are not currently accepted.
+## License
 
 Licensed under the **Apache License 2.0**. See [LICENSE](LICENSE) for full terms.
