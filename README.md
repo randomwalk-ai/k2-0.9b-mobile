@@ -4,252 +4,280 @@
 [![Model](https://img.shields.io/badge/Model-IFM%2FK2--Horizon--0.9B-purple.svg)](https://huggingface.co/IFM/K2-Horizon-0.9B)
 [![Runtime](https://img.shields.io/badge/Runtime-llama.cpp_Mobile-orange.svg)](https://github.com/ggerganov/llama.cpp)
 
-An ultra-efficient, privacy-first on-device AI notification filtering and alert engine for Android powered by **K2 Horizon (0.9B)** and **llama.cpp**.
+An on-device intelligent notification analysis and alerting engine for Android powered by **K2 Horizon 0.9B** and embedded **llama.cpp**.
 
 ---
 
-## The Problem & The Solution
+## Overview
 
-Every day, phones are flooded with notification noise. When busy at work, in meetings, or sleeping at night, muting notifications is the easiest fix—but you risk missing critical alerts that actually matter.
+Modern mobile users face continuous notification fatigue. Standard device muting silences everything indiscriminately, risking missed emergency messages, work escalations, or important personal communications.
 
-**K2 Horizon Notification Assistant** allows users to define priority rules in natural plain English. When an incoming notification matches your criteria, the app triggers a **high-priority media sound chime and custom vibration—even if your phone's notification volume is muted or set to zero**. 
+**K2 Horizon Notification Assistant** enables users to define custom notification priorities using plain English (e.g., *"if any msg from madhu it is important, if she sends reels it is not important"*). When an incoming notification matches an active rule, the system triggers a **high-priority audio chime and custom vibration—even when the device notification volume is muted or set to zero**.
 
-Everything runs **100% locally on-device**: zero cloud API calls, zero telemetry, and zero privacy compromise. Furthermore, sensitive notification history stored locally is excluded from Android Auto Backup / cloud backup and device-to-device transfer through explicit app backup rules.
+### Core Technical Architecture
+
+Running raw neural network inference over every incoming notification is impractical for battery-powered mobile devices. This project implements a **Hybrid Ahead-of-Time (AOT) Rule Compilation Architecture**:
+
+$$\text{Natural Language Intent} \longrightarrow \text{AOT Compilation} \longrightarrow \text{Deterministic Runtime Matcher} \longrightarrow \text{Selective Semantic Inference}$$
+
+K2 Horizon acts primarily as an **Ahead-of-Time Rule Compiler**. When a user adds or edits a rule, K2 Horizon parses the natural-language intent once, compiling it into a structured JSON rule schema. Incoming notifications are then evaluated against this schema in memory by a deterministic fast classifier in `<0.2 ms`. If and only if a rule explicitly demands tone, sentiment, or emotional nuance (e.g., *"any message from pranav when he is angry it is not important"*), the fast classifier routes the message to K2 Horizon on demand for deep semantic reasoning.
 
 ---
 
-## Architecture & System Design
+## Key Features
 
-```
- ┌────────────────────────────────────┐
- │ 1. Add a Rule                      │
- │                                    │
- │  📝 Write rule in plain English   │
- │              │                     │
- │              ▼                     │
- │  🧠 K2 Horizon AI reads it once    │
- │              │                     │
- │              ▼                     │
- │  💾 Saves as Simple / Complex Rule │
- └──────────────────┬─────────────────┘
-                    │
-                    │ (Uses saved rules)
-                    ▼
- ┌────────────────────────────────────────────────────────────────────────┐
- │ ⚙️ AI Rule Engine                                                      │
- │                                                                        │
- │                      🔍 Which type of rule matches? ◄── [ 2. Notification ]
- │                                    │                    [    Arrives      ]
- │                  ┌─────────────────┴─────────────────┐                 │
- │                  ▼                                   ▼                 │
- │  ⚡ Simple Rule (Apps, Names, Keywords) 🧠 Complex Rule (Tone, Emotion)│
- │  ┌─────────────────────────────────┐   ┌─────────────────────────────┐ │
- │  │      Fast Classifier (<0.2ms)   │   │       K2 Horizon AI         │ │
- │  │    • Zero heat                  │   │   • Runs on-demand for      │ │
- │  │    • Zero battery drain         │   │     deep reasoning          │ │
- │  └────────────────┬────────────────┘   └──────────────┬──────────────┘ │
- │                   │                                   │                │
- │                   └─────────────────┬─────────────────┘                │
- │                                     │                                  │
- │                                     ▼                                  │
- │                            ❗️ Important?                              │
- └─────────────────────────────────────┬──────────────────────────────────┘
-                                       │
-                    ┌──────────────────┴──────────────────┐
-               [ YES ]                                 [ NO ]
-                    │                                     │
-                    ▼                                     ▼
- ┌────────────────────────────────────┐ ┌─────────────────────────────────┐
- │ 3. Result & Action                 │ │ 3. Result & Action              │
- │                                    │ │                                 │
- │ 🔊 High-Priority Alert             │ │ 🔕 Silence Quietly              │
- │    (Sound Chime & Vibrate)         │ │    (Muted)                      │
- └────────────────────────────────────┘ └─────────────────────────────────┘
+- **Natural-Language Rule Authoring**: Define complex notification priority policies in everyday English without writing regex or complex logical scripts.
+- **Ahead-of-Time (AOT) Rule Compilation**: K2 Horizon parses rule intent once at creation time, compiling it into structured JSON matching schemas.
+- **Deterministic Fast-Path Execution**: Evaluates app filters, contact names, keywords, and exclusion criteria in `<0.2 ms` with zero GPU/NPU overhead.
+- **Selective On-Demand Semantic Reasoning**: Invokes K2 Horizon only when emotional tone, sarcasm, or contextual intent requires deep reasoning.
+- **High-Priority Media Alerting**: Bypasses system notification mute settings using custom audio/vibration channels for urgent alerts.
+- **Local Notification Log**: On-device history tracking matching decisions, latency, and rule evaluations.
+- **Configurable Retention**: User-configurable log history retention to manage device storage.
+- **100% Offline & Private**: Zero external network requests, zero telemetry, and no `INTERNET` permission.
+- **Explicit Backup Exclusions**: Sensitive notification databases are explicitly excluded from Android Cloud Backup and device migration transfers.
+
+---
+
+## Architecture & How It Works
+
+```mermaid
+flowchart TD
+    UserRule["User writes natural-language rule"] --> K2Compiler["K2 Horizon 0.9B (AOT Compiler)"]
+    K2Compiler --> StructuredRule["Structured JSON Rule Schema"]
+
+    Notif["Notification Arrives"] --> Matcher["Deterministic Runtime Matcher"]
+    StructuredRule -.-> Matcher
+
+    Matcher -->|"Simple Rule (App / Contact / Keyword)"| FastDecision["Fast Decision (<0.2 ms)"]
+    Matcher -->|"Semantic Rule (Tone / Emotion / Context)"| K2Semantic["K2 Horizon 0.9B (On-Demand)"]
+    K2Semantic --> SemanticDecision["Semantic Reasoning Decision"]
+
+    FastDecision --> Action{"Priority Decision"}
+    SemanticDecision --> Action
+    Action -->|"Important"| Alert["High-Priority Alert (Chime & Vibrate)"]
+    Action -->|"Not Important"| Mute["Silence Notification"]
 ```
 
-### Ahead-of-Time (AOT) Rule Compilation Architecture
+### Execution Flow:
 
-Running model inference on every incoming notification was fundamentally the wrong design for an always-on mobile service. To eliminate battery drain and device heating, K2 Horizon acts as an **Ahead-of-Time (AOT) Rule Compiler**. The language model primarily runs when you create or edit a rule, translating plain-English intent into deterministic matching logic, with on-demand inference for rules that require semantic reasoning:
-
-1. **1. Add a Rule (AOT Compilation)**:
-   - When you write a rule in plain English (e.g., *"if any msg from madhu it is important, if she sends reels it is not important"*), K2 Horizon reads it **once**.
-   - It compiles the natural language intent into a structured JSON schema and saves it as either a **Simple Rule** or a **Complex Rule**.
-2. **2. Notification Arrives (AI Rule Engine)**:
-   - **Simple Rules (Apps, Names, Keywords, Exclusions)**: Evaluated instantly by the **Fast Classifier (`<0.2 ms`)** in native memory with zero heat and zero battery drain.
-   - **Complex Rules (Tone, Emotion, Context)**: If and only if a rule requires sentiment or emotional nuance (e.g., *"any message from pranav when he is angry it is not important"*), the notification is routed to **K2 Horizon AI** on-demand for deep reasoning.
-3. **3. Result & Action**:
-   - **High-Priority Alert**: Triggers a sound chime and custom vibration even if phone notification volume is muted or set to zero.
-   - **Silence Quietly**: Silences non-priority notifications without interruption.
+1. **Rule Creation Time (AOT Compilation)**: K2 Horizon evaluates the rule prompt once and extracts target app identifiers, sender contacts, required keywords, exclusion terms, and semantic flags into a structured JSON schema.
+2. **Runtime Fast Path (<0.2 ms)**: When an Android notification arrives, the fast classifier evaluates sender strings, app package names, and keywords against compiled schemas in native memory.
+3. **On-Demand Semantic Escalation**: If a notification satisfies base contact criteria for a rule marked with semantic reasoning, the notification text is escalated to K2 Horizon for contextual analysis.
+4. **Alert Dispatch**: Notifications resolved as important trigger immediate audio chimes and haptics; non-matching or excluded notifications are silenced quietly.
 
 ---
 
-## Model Setup & Installation
+## Model & Runtime
 
-The mobile app runs the 4-bit quantized **K2 Horizon 0.9B (`Q4_K_M`, ~666 MB)** model via the embedded `llama.cpp` C++ engine.
+This repository maintains a clear distinction between the **mobile deployment runtime** and the **server/desktop benchmark evaluation harness**:
+
+| Component | Android Mobile Deployment | Benchmark Evaluation Harness |
+| :--- | :--- | :--- |
+| **Model** | [IFM/K2-Horizon-0.9B](https://huggingface.co/IFM/K2-Horizon-0.9B) | [IFM/K2-Horizon-0.9B](https://huggingface.co/IFM/K2-Horizon-0.9B) |
+| **Format** | 4-bit Quantized GGUF (`Q4_K_M`) | Full Precision FP32 PyTorch / Transformers |
+| **Artifact** | [`k2-horizon-0.9b-q4_k_m.gguf`](https://huggingface.co/IFM/K2-Horizon-0.9B-GGUF) (~635 MiB / ~666 MB) | Base PyTorch weights |
+| **Runtime Engine** | Embedded [llama.cpp](https://github.com/ggerganov/llama.cpp) C++ mobile engine | Python 3.10+ / PyTorch CPU |
+| **Execution Target** | Mobile ARM64 CPU | Desktop / Server CPU |
 
 > [!TIP]
-> **Why 4-Bit Quantization (`Q4_K_M`) for Real-World Mobile Deployment?**  
-> For everyday mobile deployment on Android, the **4-bit quantized version of K2 Horizon (Q4_K_M, ~666 MB)** is more than enough to handle all real-world rules and workloads. It reduces memory usage by 70%, lowers inference latency, and eliminates device heating—providing the optimal balance of deep reasoning intelligence, instantaneous AOT rule compilation, and all-day battery efficiency.
-
-### Step 1: Download the Model
-
-Download the pre-converted `k2-horizon-0.9b-q4_k_m.gguf` file:
-
-```bash
-# Download using Hugging Face Hub CLI
-huggingface-cli download IFM/K2-Horizon-0.9B-GGUF k2-horizon-0.9b-q4_k_m.gguf --local-dir ./
-```
-
-> **Manual Conversion from BF16 (Optional):**  
-> If starting from the base [IFM/K2-Horizon-0.9B](https://huggingface.co/IFM/K2-Horizon-0.9B) repository:
-> ```bash
-> # 1. Convert Hugging Face weights to GGUF
-> python convert_hf_to_gguf.py path/to/K2-Horizon-0.9B --outfile k2-horizon-0.9b-f16.gguf
->
-> # 2. Quantize to 4-bit (Q4_K_M)
-> ./llama-quantize k2-horizon-0.9b-f16.gguf k2-horizon-0.9b-q4_k_m.gguf Q4_K_M
-> ```
+> **Why 4-Bit Quantization (`Q4_K_M`) for Real-World Mobile Deployment?**<br>
+> For everyday mobile deployment on Android, the 4-bit quantized version of K2 Horizon (Q4_K_M, ~635 MiB / ~666 MB) is more than enough to handle all real-world rules and workloads. It reduces memory usage by 70%, lowers inference latency, and eliminates device heating—providing the optimal balance of deep reasoning intelligence, instantaneous AOT rule compilation, and all-day battery efficiency.
 
 ---
 
-### Step 2: Push Model to Your Android Device
+## Quick Start
 
-Place the `.gguf` model file on your Android device using either method:
+### Prerequisites
+- **Development Environment**: Android Studio (Ladybug / Meerkat or later) with Java 17.
+- **Target Device**: Physical Android device running Android 13+ (API Level 33+, targetSdk 36).
+- **Model File**: [`k2-horizon-0.9b-q4_k_m.gguf`](https://huggingface.co/IFM/K2-Horizon-0.9B-GGUF) (~635 MiB / ~666 MB).
+- **Permissions**: Android `BIND_NOTIFICATION_LISTENER_SERVICE` access.
 
-#### Method A: Direct ADB Push (Recommended)
-```bash
-# Push directly into the device's Download folder (auto-discovered by app on launch)
-adb push k2-horizon-0.9b-q4_k_m.gguf /sdcard/Download/
-```
-
-#### Method B: In-App File Importer
-1. Transfer `k2-horizon-0.9b-q4_k_m.gguf` to any folder on your device.
-2. In the app settings screen, tap **"Import GGUF Model"** and select the file using the Android system file picker.
-
----
-
-## Installation & Quick Start
-
-### 1. Build & Install APK
-
-Run directly from your terminal:
+### 1. Build & Install Android App
 
 ```bash
 # Clone the repository
 git clone https://github.com/randomwalk-ai/k2-0.9b-mobile.git
 cd k2-0.9b-mobile/llama.cpp/examples/llama.android
 
-# Build the APK
+# Build debug APK
 ./gradlew assembleDebug
 
-# Install on your connected Android device
+# Install to connected Android device
 adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```
 
-*(Alternatively, open the project in Android Studio and click **Run ▶**)*
+*(Alternatively, open `llama.cpp/examples/llama.android` in Android Studio and click **Run ▶**).*
 
-### Initial Device Permissions
-1. Open **K2 Horizon** on your Android device.
-2. Grant **Notification Listener Permission** when prompted (`Settings > Apps > Special App Access > Notification Access`).
-3. The app will auto-discover the model and show `Model Ready`.
+### 2. Download and Transfer Model File
+
+Download the pre-quantized GGUF model artifact:
+
+```bash
+# Download using Hugging Face Hub CLI
+huggingface-cli download IFM/K2-Horizon-0.9B-GGUF k2-horizon-0.9b-q4_k_m.gguf --local-dir ./
+```
+
+Deploy the `.gguf` file to your Android device:
+
+- **Option A: Direct ADB Push (Recommended)**
+  ```bash
+  adb push k2-horizon-0.9b-q4_k_m.gguf /sdcard/Download/
+  ```
+  *(The application automatically scans the device's `Download/` directory on startup).*
+- **Option B: In-App Model Importer**
+  Transfer `k2-horizon-0.9b-q4_k_m.gguf` to any device folder, launch the app, tap **"Import GGUF Model"**, and select the file.
+
+### 3. Grant Permissions & Create Rules
+
+1. Launch **Notification Analyzer** on the device.
+2. Grant **Notification Listener Access** when prompted (`Settings > Apps > Special App Access > Notification Access`).
+3. Verify that the UI displays `Model Ready`.
+4. Tap **+ Add Rule** and enter a rule in natural language (e.g., *"anyone msges about playing cricket it is important"*).
 
 ---
 
-## Benchmarks & Performance
+## Benchmarks & Evaluation
 
-### 1. 500-Test-Case Stress Benchmark (K2 Horizon 0.9B vs. Llama 3.2 1B)
+### 500-Test-Case Stress Benchmark
 
-Evaluated across 500 complex test cases covering emotional tones (sarcasm, passive aggressive frustration, anger), urgent escalations, conditional exclusions, and app-specific rules. The reported accuracy reflects end-to-end performance of our notification-analysis pipeline using each model’s compiled rules, deterministic matching, and semantic escalation where applicable.
+We benchmarked K2 Horizon 0.9B against Llama 3.2 1B using the same 500-case dataset and evaluation harness. The reported accuracy reflects end-to-end performance of our notification-analysis pipeline using each model’s compiled rules, deterministic matching, and semantic escalation where applicable.
 
-| Metric | K2 Horizon 0.9B | Llama 3.2 1B | Margin |
+| Evaluation Metric | K2 Horizon 0.9B | Llama 3.2 1B | Absolute Margin |
 | :--- | :---: | :---: | :---: |
-| **Overall Triage Accuracy** | **66.2%** (331/500) | 41.0% (205/500) | **+25.2%** |
-| **AOT Rule Compilation (15 Complex Rules)** | **86.7%** (13/15) | 26.7% (4/15) | **+60.0%** |
-| **Deep AI Emotional Nuance (250 Tone Cases)** | **58.4%** | 48.4% | **+10.0%** |
+| **Overall Notification Triage** | **66.2%** (331/500) | 41.0% (205/500) | **+25.2%** |
+| **AOT Rule Compilation (15 Rules)** | **86.7%** (13/15) | 26.7% (4/15) | **+60.0%** |
+| **Deep AI Emotional Nuance (250 Tone Cases)** | **58.4%** (146/250) | 48.4% (121/250) | **+10.0%** |
 
-*Note: These results come from our internal notification-analysis benchmark and should not be interpreted as a general ranking of K2 Horizon 0.9B versus Llama 3.2 1B across language-model tasks. In accordance with system semantics, suppression actions (IGNORE ≡ MUTE) are normalized during evaluation.*
+> [!NOTE]
+> **Methodology & Normalization Notes:**<br>
+> - These results come from our internal notification-analysis benchmark and should not be interpreted as a general ranking of K2 Horizon 0.9B versus Llama 3.2 1B across language-model tasks.
+> - In accordance with system semantics, suppression actions (`IGNORE` ≡ `MUTE`) are normalized during evaluation because both produce the same non-alerting runtime behavior.
+> - The 15 natural-language rules evaluate compilation across contact lookups, app filters, multi-condition exclusions, and tone-detection criteria.
 
-- **Key Finding**: Between K2 Horizon 0.9B and Llama 3.2 1B, K2 proved to be the better fit for our notification-analysis workload. As a dedicated reasoning model, its reasoning-oriented design and strict instruction following allow it to reliably compile complex natural language rules into structured schemas (86.7%) and decipher subtle human emotions like passive aggressive frustration, whereas Llama 3.2 1B frequently produced malformed schemas or misclassified dismissiveness in our evaluation.
+### Reproducing the Benchmark
 
-#### Reproducing the 500-Case Benchmark
-
-The repository includes the exact Phase 1 compiled-rule artifact ([`benchmarks/compiled_rules_phase1.json`](benchmarks/compiled_rules_phase1.json)) used by the Phase 2 runtime benchmark.
-
-To reproduce the published 500-case evaluation results from a clean checkout, run the following commands from the repository root:
+To run the full 500-sample Phase 2 benchmark evaluation harness from the repository root:
 
 ```bash
 # 1. Install benchmark dependencies
 pip install torch transformers llama-cpp-python
 
-# 2. Download the Llama 3.2 1B Instruct GGUF model into the repository root (K2 Horizon downloads automatically from Hugging Face)
+# 2. Download Llama 3.2 1B Instruct baseline GGUF (K2 weights download automatically via Hugging Face)
 huggingface-cli download lmstudio-community/Llama-3.2-1B-Instruct-GGUF Llama-3.2-1B-Instruct-bf16.gguf --local-dir ./
 
-# 3. Run the Phase 2 benchmark runner from the repository root
+# 3. Execute the benchmark runner
 python benchmarks/run_phase2_benchmark_500.py
 ```
 
----
-
-### 2. 5-Day Daily-Driver Testing
-
-Tested on a physical **8GB RAM Android device** under regular daily use:
-
-- **Test Duration**: 5 Continuous Days with 7 active natural language rules.
-- **Notification Volume**: ~500 notifications/day (~2,500 total processed from WhatsApp, Microsoft Teams, Instagram, and phone calls).
-- **Observations**: We observed only 2–3 minor edge cases across approximately 2,500 notifications.
-- **Thermals & Battery**: No measurable additional standby battery drain and no noticeable thermal buildup during our 5-day test.
-- **Latency**: `< 0.2 ms` for deterministic rules; `~150–300 ms` for on-demand deep reasoning.
+The benchmark reads the frozen Phase 1 compiled schema artifact ([`benchmarks/compiled_rules_phase1.json`](benchmarks/compiled_rules_phase1.json)) and evaluates against [`benchmarks/test_cases_500.json`](benchmarks/test_cases_500.json).
 
 ---
 
-## Supported Rule Types
+## Performance & Runtime Characteristics
 
-| Rule Intent | Engine | Natural Language Example |
-| :--- | :--- | :--- |
-| **`Fast Contact`** | Fast Classifier (`<0.2ms`) | *"if pranav calls me it is important"* |
-| **`AOT Topic Filter`** | Fast Classifier (`<0.2ms`) | *"anyone msges about playing cricket it is important"* |
-| **`AOT Conditional`** | Fast Classifier (`<0.2ms`) | *"if any msg from madhu it is important, if she sends reels it is not important"* |
-| **`Deep AI Emotion`** | K2 Horizon AI (`On-Demand`) | *"any message from pranav when he is angry it is not important"*, *"Alert if boss sounds furious"* |
+### Latency Profiles by Path
+
+- **Deterministic Matcher Path (`<0.2 ms`)**:
+  *Scope*: Measures in-memory schema evaluation for app filtering, contact matching, keyword searches, and exclusion checks.
+  *Note*: This metric specifically measures the deterministic matching algorithm and excludes Android OS notification delivery latency, Room database disk writes, and audio/haptic alert dispatch.
+- **Selective Semantic Inference Path (`~150–300 ms`)**:
+  *Scope*: Measures on-device Q4_K_M GGUF model inference latency on mobile CPU when deep emotional or contextual reasoning is invoked.
+
+### Supported Rule Categories
+
+| Rule Category | Execution Engine | Typical Latency | Natural Language Example |
+| :--- | :--- | :--- | :--- |
+| **Fast Contact** | Fast Classifier | `<0.2 ms` | *"if pranav calls me it is important"* |
+| **AOT Topic Filter** | Fast Classifier | `<0.2 ms` | *"anyone msges about playing cricket it is important"* |
+| **AOT Conditional** | Fast Classifier | `<0.2 ms` | *"if any msg from madhu it is important, if she sends reels it is not important"* |
+| **App Filter** | Fast Classifier | `<0.2 ms` | *"any message from teams is important"* |
+| **Deep AI Emotion** | K2 Horizon (On-Demand) | `~150–300 ms` | *"any message from pranav when he is angry it is not important"* |
 
 ---
 
-## Project Structure
+## Real-World Daily-Driver Testing
+
+The system was evaluated as a primary daily driver on a physical 8GB RAM Android device:
+
+| Evaluation Dimension | Observed Result |
+| :--- | :--- |
+| **Test Duration** | 5 continuous days |
+| **Notification Volume** | ~500 notifications/day (~2,500 total processed) |
+| **Notification Sources** | WhatsApp, Microsoft Teams, Instagram, Phone calls, SMS |
+| **Active Rules** | 7 concurrent natural-language rules |
+| **Observed Edge Cases** | 2–3 minor edge cases across ~2,500 notifications |
+| **Standby Battery Impact** | No measurable additional drain observed in tested configuration |
+| **Thermal Behavior** | No noticeable thermal buildup observed in tested configuration |
+
+*Note: These metrics represent empirical observations on the test hardware and operational environment rather than universal platform guarantees.*
+
+---
+
+## Privacy & Data Protection
+
+- **100% On-Device Processing**: All model compilation and semantic inference runs locally via embedded `llama.cpp`. No notification contents or metadata are ever transmitted to external servers.
+- **Zero Cloud LLM / API Dependency**: The system operates entirely offline without third-party API keys or subscription services.
+- **No Internet Permission**: The Android application does not request or declare `android.permission.INTERNET` in `AndroidManifest.xml`.
+- **Local Persistence**: Rules and notification logs are stored in a local SQLite database managed by Android Room.
+- **Explicit Backup & Transfer Exclusions**: Sensitive notification tables and private logs are explicitly excluded from Android Cloud Auto-Backup and device-to-device transfers via [`data_extraction_rules.xml`](llama.cpp/examples/llama.android/app/src/main/res/xml/data_extraction_rules.xml) and [`backup_rules.xml`](llama.cpp/examples/llama.android/app/src/main/res/xml/backup_rules.xml).
+
+---
+
+## Repository Structure
 
 ```
-k2-0.9b-mobile/
-├── README.md
-├── LICENSE
+.
+├── benchmarks/                        # 500-sample benchmark evaluation suite
+│   ├── benchmark_engine.py            # Automated benchmark evaluation harness
+│   ├── compiled_rules_phase1.json     # Phase 1 compiled rule schemas for K2 & Llama
+│   ├── model_engine.py                # CPU PyTorch/Transformers & GGUF model runner
+│   ├── model_manager.py               # Model weight loader and cache manager
+│   ├── phase2_benchmark_500_results.json # Full evaluation results dataset
+│   ├── run_phase2_benchmark_500.py    # 500-sample triage benchmark runner
+│   └── test_cases_500.json            # Curated 500-sample stress benchmark dataset
+│
 ├── blog/                              # Web blog static deployment bundle
 │   ├── index.html                     # Case study article & interactive post
 │   ├── post.html                      # Standalone article post
 │   └── static/images/                 # System architecture and benchmark visual assets
 │
-├── benchmarks/                        # 500-sample benchmark evaluation suite
-│   ├── run_phase2_benchmark_500.py    # 500-sample stress benchmark runner
-│   ├── benchmark_engine.py            # Automated benchmark evaluation harness
-│   ├── compiled_rules_phase1.json     # Phase 1 compiled rule schemas for K2 & Llama
-│   ├── test_cases_500.json            # 500-sample stress benchmark dataset
-│   └── phase2_benchmark_500_results.json # Raw evaluation benchmark results
+├── llama.cpp/                         # Embedded llama.cpp runtime & Android app
+│   └── examples/llama.android/
+│       ├── app/                       # Android application (Kotlin & Jetpack Compose)
+│       │   └── src/main/java/com/example/llama/aichat/
+│       │       ├── ai/                # AOT compiler, parser, prompt builder & inference manager
+│       │       ├── data/              # Room SQLite database (rules & notifications)
+│       │       ├── notification/      # NotificationListenerService & hybrid processor
+│       │       └── ui/                # UI screens and view models
+│       └── lib/                       # JNI C++ bindings & CMake build configuration
 │
-└── llama.cpp/examples/llama.android/  # Android Application & Native Engine
-    ├── app/src/main/java/com/example/llama/aichat/
-    │   ├── ai/
-    │   │   ├── K2InferenceManager.kt  # On-device llama.cpp loader & lifecycle
-    │   │   ├── K2PromptBuilder.kt     # System prompts & few-shot compiler prompts
-    │   │   ├── K2ResponseParser.kt    # Structured JSON response parser
-    │   │   └── RuleClassifier.kt      # Edge AI rule classification schemas
-    │   ├── notification/
-    │   │   ├── NotificationListener.kt  # Android NotificationListenerService
-    │   │   └── NotificationProcessor.kt # Hybrid dual-tier routing processor
-    │   ├── data/                      # Room Database (Rules & Notification Logs)
-    │   └── ui/                        # Jetpack Compose UI Screens
-    └── lib/                           # Native C++ llama.cpp bindings & CMake config
+├── README.md                          # Repository documentation
+└── LICENSE                            # Apache 2.0 license
 ```
+
+---
+
+## Documentation & References
+
+- **[Engineering Blog Post](https://k2-blog-randomwalk.vercel.app/)**: Comprehensive engineering case study detailing thermal optimization, memory management, and benchmark breakdowns.
+- **[IFM/K2-Horizon-0.9B on Hugging Face](https://huggingface.co/IFM/K2-Horizon-0.9B)**: Official base model repository and model cards.
+- **[IFM/K2-Horizon-0.9B-GGUF on Hugging Face](https://huggingface.co/IFM/K2-Horizon-0.9B-GGUF)**: Official pre-quantized GGUF model weights for mobile execution.
+- **[llama.cpp Repository](https://github.com/ggerganov/llama.cpp)**: Open-source C++ inference engine for LLMs.
+
+---
+
+## Technical Limitations
+
+- **Workload Scope**: The benchmark suite is specifically designed for mobile notification triage, AOT rule compilation, and tone classification; it does not evaluate general coding, mathematical reasoning, or multi-turn conversational capabilities.
+- **Hardware Variation**: Semantic inference latency and memory throughput vary based on device CPU architecture, available RAM, and OEM thermal throttling policies.
+- **Selective Execution**: Deep AI reasoning runs on-demand and requires 150–300 ms on mobile hardware, making deterministic routing necessary for real-time throughput.
+- **Platform Permissions**: Reliable background notification analysis requires explicit user-granted notification listener permissions and proper OEM battery optimization whitelisting.
 
 ---
 
 ## License & Contribution Policy
 
-This repository is maintained as a standalone open-source project showcasing on-device AI system design. External pull requests and direct external contributions are not currently accepted.
+This repository is maintained as an open-source engineering reference showcasing on-device AI system architecture. External pull requests are not currently accepted.
 
-Licensed under the **Apache License 2.0**. See the [LICENSE](LICENSE) file for details.
+Licensed under the **Apache License 2.0**. See [LICENSE](LICENSE) for full terms.
